@@ -1,5 +1,8 @@
 Revision history for ApacheDBI.
 
+0.72 July 13, 1997
+	- added logging option to AuthenDBI
+
 0.71 July 01, 1997
 	- debugging is now controlled by a global variable
 

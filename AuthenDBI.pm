@@ -6,11 +6,11 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthenDBI.pm,v 1.11 1997/06/30 20:12:22 mergl Exp $
+#$Id: AuthenDBI.pm,v 1.12 1997/07/12 21:41:22 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::AuthenDBI::VERSION = '0.71';
+$Apache::AuthenDBI::VERSION = '0.72';
 
 $Apache::AuthenDBI::DEBUG = 0;
 
@@ -23,6 +23,8 @@ my %Config = (
     'AuthDBINameField'     => '',
     'AuthDBIPasswordField' => '',
     'AuthDBIUserTable'     => '',
+    'AuthDBILogField'      => '',
+    'AuthDBILogString'     => '',
 );
 
 sub handler {
@@ -31,7 +33,7 @@ sub handler {
 
     print STDERR "\nApache::AuthenDBI::handler\n" if $Apache::AuthenDBI::DEBUG;
 
-    return OK unless $r->is_initial_req; #only the first internal request
+    return OK unless $r->is_initial_req; # only the first internal request
 
     # here the dialog pops up and asks you for userid and password
     my($res, $passwd_sent) = $r->get_basic_auth_pw;
@@ -67,8 +69,8 @@ sub handler {
 	return SERVER_ERROR;
     }
 
-    my $rc;
-    unless ($rc = $sth->execute) {
+    my $rv;
+    unless ($rv = $sth->execute) {
 	$r->log_reason("can not execute statement: $DBI::errstr", $r->uri);
 	$r->note_basic_auth_failure;
 	return SERVER_ERROR;
@@ -91,6 +93,21 @@ sub handler {
 	$r->note_basic_auth_failure;
 	return AUTH_REQUIRED;
     }
+
+
+    if ($attr->{LogField}) {
+
+      $statement = "UPDATE $attr->{UserTable} SET $attr->{LogField} = $attr->{LogString} WHERE $attr->{NameField}=$user_sent";
+      print STDERR "statement = $statement\n" if $Apache::AuthenDBI::DEBUG;
+
+      my $rv;
+      unless ($rv = $dbh->do($statement)) {
+          $r->log_reason("can not do statement: $DBI::errstr", $r->uri);
+          $r->note_basic_auth_failure;
+          return SERVER_ERROR;
+      }
+    }
+
 
     $dbh->disconnect if !($INC{'Apache.pm'});
 
@@ -122,7 +139,7 @@ Apache::AuthenDBI - Authentication via Perl's DBI
  #authenticate via DBI
  PerlAuthenHandler Apache::AuthenDBI
 
- PerlSetVar AuthDBIDB     dbname
+ PerlSetVar AuthDBIDB     data_source
  PerlSetVar AuthDBIUser   username
  PerlSetVar AuthDBIAuth   auth
  PerlSetVar AuthDBIDriver driver
@@ -132,6 +149,11 @@ Apache::AuthenDBI - Authentication via Perl's DBI
  PerlSetVar AuthDBINameField user
  PerlSetVar AuthDBIPasswordField password
  #SELECT PasswordField from UserTable WHERE NameField='$user_sent'
+
+ # optional logging option
+ PerlSetVar AuthDBILogField  log
+ PerlSetVar AuthDBILogString string
+ # UPDATE UserTable SET LogField = LogString WHERE NameField='$user_sent'
 
  <Limit GET POST>
  require valid-user
