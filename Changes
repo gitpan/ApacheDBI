@@ -1,0 +1,11 @@
+Revision history for ApacheDBI.
+
+0.1   Mar 15, 1997
+	- creation
+
+0.2   Apr  6, 1997
+	- unused methods deleted
+	- AuthenDBI integrated
+        - method for disconnect added
+	- menu item for Apache::Status added
+
