@@ -4,11 +4,11 @@ use Apache ();
 use DBI ();
 use strict;
 
-# $Id: DBI.pm,v 1.43 1999/09/27 19:43:52 mergl Exp $
+# $Id: DBI.pm,v 1.44 1999/09/28 16:13:32 mergl Exp $
 
 require_version DBI 1.00;
 
-$Apache::DBI::VERSION = '0.86';
+$Apache::DBI::VERSION = '0.87';
 
 # 1: report about new connect
 # 2: full debug output
@@ -275,14 +275,16 @@ Here is generalized ping method, which can be added to the driver module:
 
     sub ping {
         my($dbh) = @_;
-        local $dbh->{RaiseError} = 0 if $dbh->{RaiseError};
-        # adapt the select statement to you database:
-        my $sth = $dbh->prepare( "SELECT 1") or return 0;
-        $sth->execute or return 0;
-        # depending upon the database a prepare is sufficient:
-        my $ret = $sth->fetchrow_array;
-        $sth->finish;
-        return $ret;
+        my $ret = 0;
+        eval {
+            local $SIG{__DIE__}  = sub { return (0); };
+            local $SIG{__WARN__} = sub { return (0); };
+            # adapt the select statement to your database:
+            my $sth = $dbh->prepare("SELECT 1");
+            $ret = $sth && ($sth->execute);
+            $sth->finish;
+        };
+        return ($@) ? 0 : $ret;
     }
 }
 

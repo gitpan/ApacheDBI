@@ -1,5 +1,9 @@
 Revision history for ApacheDBI.
 
+0.87 September 28, 1999
+	- fix for the usage of the environment variable DBI_DSN 
+	  introduced in 0.86 was still incomplete.
+
 0.86 September 27, 1999
 	- in AuthDBI remove check of configured data_source in order to allow 
 	  the usage of the environment variable DBI_DSN. Bug spotted by 

@@ -15,7 +15,7 @@ use strict;
 
 # optional configuration for Apache::DBI.pm:
 
-# choose debug output
+# choose debug output: 0 = off, 1 = quiet, 2 = chatty
 #$Apache::DBI::DEBUG = 2;
 
 # configure all connections which should be established during server startup.
@@ -35,7 +35,7 @@ use strict;
 
 # optional configuration for Apache::AuthDBI.pm:
 
-# choose debug output
+# choose debug output: 0 = off, 1 = quiet, 2 = chatty
 #$Apache::AuthDBI::DEBUG = 2;
 
 # set lifetime in seconds for the entries in the cache

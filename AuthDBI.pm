@@ -6,11 +6,11 @@ use DBI ();
 use IPC::SysV qw( IPC_CREAT IPC_RMID S_IRUSR S_IWUSR );
 use strict;
 
-# $Id: AuthDBI.pm,v 1.4 1999/09/27 19:43:52 mergl Exp $
+# $Id: AuthDBI.pm,v 1.5 1999/09/28 16:13:32 mergl Exp $
 
 require_version DBI 1.00;
 
-$Apache::AuthDBI::VERSION = '0.86';
+$Apache::AuthDBI::VERSION = '0.87';
 
 # 1: report about cache miss
 # 2: full debug output
@@ -192,7 +192,7 @@ sub authen {
     my @data_sources = split(/~/, $Attr->{data_source});
     my @usernames    = split(/~/, $Attr->{username});
     my @passwords    = split(/~/, $Attr->{password});
-    @data_sources = '' unless defined(@data_sources); # use ENV{DBI_DSN}
+    $data_sources[0] = '' unless defined($data_sources[0]); # use ENV{DBI_DSN} if not defined
 
     # obtain the id for the cache
     my $data_src = $Attr->{data_source};
@@ -239,14 +239,11 @@ sub authen {
         printf STDERR "$prefix passwd not found in cache \n" if $Apache::AuthDBI::DEBUG;
 
         # connect to database, use all data_sources until the connect succeeds
-        my ($j, $connect);
+        my $j;
         for ($j = 0; $j <= $#data_sources; $j++) {
-            if ($dbh = DBI->connect($data_sources[$j], $usernames[$j], $passwords[$j])) {
-                $connect = 1;
-                last;
-            }
+            last if ($dbh = DBI->connect($data_sources[$j], $usernames[$j], $passwords[$j]));
         }
-        unless ($connect) {
+        unless ($dbh) {
             $r->log_reason("$prefix db connect error with data_source >$Attr->{data_source}<", $r->uri);
             return SERVER_ERROR;
         }

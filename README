@@ -1,6 +1,6 @@
 #-------------------------------------------------------
 #
-# $Id: README,v 1.39 1999/09/27 19:46:59 mergl Exp $
+# $Id: README,v 1.40 1999/09/28 16:13:32 mergl Exp $
 #
 #-------------------------------------------------------
 
@@ -8,7 +8,7 @@
 DESCRIPTION:
 ------------
 
-This is version 0.86 of Apache::AuthDBI.pm and Apache::DBI.pm.
+This is version 0.87 of Apache::AuthDBI.pm and Apache::DBI.pm.
 
 These modules are supposed to be used with the Apache server together with 
 an embedded perl interpreter like mod_perl. They provide support for basic 
@@ -318,7 +318,7 @@ DBI      by Tim Bunce       dbi-users@isc.org
 
 ---------------------------------------------------------------------------
 
-   Edmund Mergl <E.Mergl@bawue.de>                       September 27, 1999
+   Edmund Mergl <E.Mergl@bawue.de>                       September 28, 1999
 
 
 ---------------------------------------------------------------------------
