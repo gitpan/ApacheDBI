@@ -6,11 +6,11 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthenDBI.pm,v 1.4 1997/05/16 05:10:20 mergl Exp $
+#$Id: AuthenDBI.pm,v 1.6 1997/05/16 20:39:00 mergl Exp $
 
 require_version DBI 0.81;
 
-my $VERSION = '0.3';
+my $VERSION = '0.5';
 
 my $DEBUG = $ENV{APACHE_AUTHENDBI_DEBUG} || 0;
 
@@ -92,7 +92,7 @@ sub handler {
 	return AUTH_REQUIRED;
     }
 
-    $dbh->disconnect;
+    $dbh->disconnect if !($INC{'Apache.pm'});
 
     return OK;
 }

@@ -1,14 +1,13 @@
 package Apache::DBI;
 
-use Apache ();
 use DBI ();
 use strict;
 
-#$Id: DBI.pm,v 1.4 1997/05/11 20:25:40 mergl Exp $
+#$Id: DBI.pm,v 1.6 1997/05/16 20:37:57 mergl Exp $
 
 require_version DBI 0.81;
 
-my $VERSION = '0.3';
+my $VERSION = '0.5';
 
 my $DEBUG = $ENV{APACHE_DBI_DEBUG} || 0;
 
@@ -22,11 +21,11 @@ sub connect {
     my @args= @_;
 
     my $idx = join (":", (@args));
-    return $Connected{$idx} if $Connected{$idx} and $Connected{$idx}->ping;
+    return $Connected{$idx} if ($Connected{$idx} && $Connected{$idx}->ping);
 
     print STDERR "Pid = $$, Apache::DBI::connect to '$idx'\n" if $DEBUG;
     $Connected{$idx} = $drh->connect(@args);
-    $Connected{$idx}->{InactiveDestroy};
+    $Connected{$idx}->{InactiveDestroy} = 1;
     return $Connected{$idx};
 }
 
@@ -44,7 +43,7 @@ Apache::Status->menu_item(
         return \@s;
    }
 
-) if Apache->module('Apache::Status');
+) if ($INC{'Apache.pm'} && Apache->module('Apache::Status'));
 
 
 1;

@@ -1,6 +1,6 @@
 #-------------------------------------------------------
 #
-# $Id: README,v 1.4 1997/05/11 20:25:40 mergl Exp $
+# $Id: README,v 1.6 1997/05/16 20:37:35 mergl Exp $
 #
 #-------------------------------------------------------
 
@@ -8,7 +8,7 @@
 DESCRIPTION:
 ------------
 
-This is version 0.3 of Apache::AuthenDBI.pm and Apache::DBI.pm.
+This is version 0.5 of Apache::AuthenDBI.pm and Apache::DBI.pm.
 
 These two modules are supposed to be used with the Apache daemon together with an 
 embedded perl interpreter like mod_perl. AuthenDBI.pm provides authentication via 
@@ -58,6 +58,6 @@ DBI      by Tim Bunce       <Tim.Bunce@ig.co.uk>
 
 ---------------------------------------------------------------------------
 
-   Edmund Mergl <E.Mergl@bawue.de>                       May 11, 1997
+   Edmund Mergl <E.Mergl@bawue.de>                       May 16, 1997
 
 ---------------------------------------------------------------------------

@@ -18,3 +18,6 @@ Revision history for ApacheDBI.
 	- fixed check for first internal request in
 	  AuthenDBI.pm
 
+05  May 16, 1997
+	- applied patches from Stephen E Kane <skane@cse.psu.edu>
+
