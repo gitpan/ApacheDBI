@@ -6,11 +6,11 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthenDBI.pm,v 1.22 1998/07/26 05:30:52 mergl Exp $
+#$Id: AuthenDBI.pm,v 1.26 1998/09/08 07:11:14 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::AuthenDBI::VERSION = '0.80';
+$Apache::AuthenDBI::VERSION = '0.81';
 
 $Apache::AuthenDBI::DEBUG = 0;
 
@@ -60,8 +60,13 @@ sub handler {
     print STDERR "$prefix get_basic_auth_pw: res = >$res<, password sent = >$passwd_sent<\n" if $Apache::AuthenDBI::DEBUG;
     return $res if $res; # e.g. HTTP_UNAUTHORIZED
 
+    # get username
     my ($user_sent) = $r->connection->user;
     print STDERR "$prefix user sent = >$user_sent<\n" if $Apache::AuthenDBI::DEBUG;
+
+    # get AuthName
+    my ($auth_name) = $r->auth_name;
+    print STDERR "$prefix AuthName = >$auth_name<\n" if $Apache::AuthenDBI::DEBUG;
 
     # get configuration
     my $attr = { };
@@ -87,7 +92,7 @@ sub handler {
 
     # check if the user is cached
     my $passwd;
-    if ( ! ($passwd = $Passwd{$user_sent}) ) {
+    if ( ! ($passwd = $Passwd{"$auth_name,$user_sent"}) ) {
 
         unless ( $attr->{data_source} ) {
             $r->log_reason("$prefix missing source parameter for database connect", $r->uri);
@@ -135,12 +140,12 @@ sub handler {
         $dbh->disconnect;
 
         # cache userid/password if cache_time is configured
-        $Passwd{$user_sent} = $passwd if $attr->{cache_time} > 0;
+        $Passwd{"$auth_name,$user_sent"} = $passwd if $attr->{cache_time} > 0;
     }
     print STDERR "$prefix passwd = >$passwd<\n" if $Apache::AuthenDBI::DEBUG;
 
     # update timestamp if cache_time is configured
-    $Time{$user_sent} = time if $attr->{cache_time} > 0;
+    $Time{"$auth_name,$user_sent"} = time if $attr->{cache_time} > 0;
 
     # check password
     if ( ! defined($passwd) ) {
@@ -197,18 +202,18 @@ sub handler {
         $dbh->disconnect;
     }
 
-    # after finishing the request the handler checks the password-cache and deletes any outdated users
+    # after finishing the request the handler checks the password-cache and deletes any outdated entry
     # note: the CleanupHandler runs after the response has been sent to the client
     if($attr->{cache_time} > 0 && Apache->can('push_handlers')) {
         Apache->push_handlers(PerlCleanupHandler => sub {
             print STDERR "$$ Apache::AuthenDBI PerlCleanupHandler \n" if $Apache::AuthenDBI::DEBUG;
             my $now = time;
-            my $user;
-            foreach $user (keys %Passwd) {
-                if ($now - $Time{$user} >= $attr->{cache_time}) {
-                    print STDERR "$$ Apache::AuthenDBI delete $user from cache \n" if $Apache::AuthenDBI::DEBUG;
-                    delete $Passwd{$user};
-                    delete $Time{$user};
+            my $key;
+            foreach $key (keys %Passwd) {
+                if ($now - $Time{$key} >= $attr->{cache_time}) {
+                    print STDERR "$$ Apache::AuthenDBI delete $key from cache \n" if $Apache::AuthenDBI::DEBUG;
+                    delete $Passwd{$key};
+                    delete $Time{$key};
                 }
             }
         });
@@ -418,7 +423,7 @@ Add the following line to your httpd.conf or srm.conf:
 For Apache::AuthenDBI you need to enable the appropriate call-back hooks when 
 making mod_perl: 
 
-  perl Makefile.PL DO_HTTPD=1 PERL_AUTHEN=1 PERL_CLEANUP=1 PERL_STACKED_HANDLERS=1. 
+  perl Makefile.PL PERL_AUTHEN=1 PERL_CLEANUP=1 PERL_STACKED_HANDLERS=1. 
 
 
 =head1 SECURITY

@@ -1,5 +1,10 @@
 Revision history for ApacheDBI.
 
+0.81  Sep 08, 1998
+	- Cache entries consider the AuthName to distinguish 
+	  between identical user-ids in different authorization 
+	  realms. 
+
 0.80  Jul 26, 1998
 	- applied patch from Anto Prijosoesilo <anto@inet.co.th>:
 	  change second argument for crypt function from $salt

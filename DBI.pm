@@ -3,11 +3,11 @@ package Apache::DBI;
 use DBI ();
 use strict;
 
-#$Id: DBI.pm,v 1.22 1998/07/26 05:30:53 mergl Exp $
+#$Id: DBI.pm,v 1.25 1998/09/08 07:11:15 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::DBI::VERSION = '0.80';
+$Apache::DBI::VERSION = '0.81';
 
 $Apache::DBI::DEBUG = 0;
 
@@ -167,6 +167,24 @@ implementation for the ping method, you will get an error when accessing the
 database. As a work-around you can try to replace the ping method by any 
 database command, which is cheap and safe. 
 
+Here is generalized ping method, which can be added to the driver module:
+
+{   package DBD::xxx::db; # ====== DATABASE ======
+    use strict;
+
+    sub ping {
+        my($dbh) = @_;
+        local $dbh->{RaiseError} = 0 if $dbh->{RaiseError};
+        # adapt the select statement to you database:
+        my $sth = $dbh->prepare( "SELECT 1") or return 0;
+        $sth->execute or return 0;
+        # depending upon the database a prepare is sufficient:
+        my $ret = $sth->fetchrow_array;
+        $sth->finish;
+        return $ret;
+    }
+}
+
 This module plugs in a menu item for Apache::Status. The menu lists the 
 current database connections. It should be considered incomplete because of 
 the limitations explained above. It shows the current database connections 
@@ -205,7 +223,7 @@ Apache::DBI ! For an example of the configuration order see startup.pl.
 For Apache::DBI you need to enable the appropriate call-back hooks when 
 making mod_perl: 
 
-  perl Makefile.PL DO_HTTPD=1 PERL_CHILD_INIT=1 PERL_STACKED_HANDLERS=1. 
+  perl Makefile.PL PERL_CHILD_INIT=1 PERL_STACKED_HANDLERS=1. 
 
 
 =head1 SEE ALSO

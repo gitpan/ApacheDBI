@@ -1,5 +1,7 @@
 #!/usr/local/bin/perl
 
+# example startup script for persistent database connections
+
 # make sure we are in a sane environment.
 $ENV{GATEWAY_INTERFACE} =~ /^CGI-Perl/ or die "GATEWAY_INTERFACE not Perl!";
 

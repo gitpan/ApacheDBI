@@ -1,6 +1,6 @@
 #-------------------------------------------------------
 #
-# $Id: README,v 1.21 1998/07/26 05:30:53 mergl Exp $
+# $Id: README,v 1.26 1998/09/08 07:11:16 mergl Exp $
 #
 #-------------------------------------------------------
 
@@ -8,7 +8,7 @@
 DESCRIPTION:
 ------------
 
-This is version 0.80 of Apache::AuthenDBI.pm, Apache::AuthzDBI.pm, 
+This is version 0.81 of Apache::AuthenDBI.pm, Apache::AuthzDBI.pm, 
 Apache::DBI.pm and DebugDBI.pm.
 
 These modules are supposed to be used with the Apache server together 
@@ -19,6 +19,14 @@ o AuthenDBI.pm provides authentication
 o AuthzDBI.pm  provides authorization
 o DBI.pm provides persistent database connections
 o DebugDBI.pm enables debugging
+
+
+RECENT CHANGES:
+---------------
+
+- Cache entries consider the AuthName to distinguish 
+  between identical user-ids in different authorization 
+  realms. 
 
 
 EXAMPLE:
@@ -210,8 +218,10 @@ PREREQUISITES:
 
 Configure mod_perl with: 
 
-  perl Makefile.PL DO_HTTPD=1 PERL_CHILD_INIT=1 PERL_AUTHEN=1 
-                   PERL_AUTHZ=1 PERL_CLEANUP=1 PERL_STACKED_HANDLERS=1
+  perl Makefile.PL PERL_CHILD_INIT=1 PERL_AUTHEN=1 PERL_AUTHZ=1 
+                   PERL_CLEANUP=1 PERL_STACKED_HANDLERS=1
+
+If there are no security reasons to limit the API, just use EVERYTHING=1. 
 
 
 INSTALLATION:
@@ -227,7 +237,7 @@ INSTALLATION:
 IF YOU HAVE PROBLEMS:
 ---------------------
 
-Please send comments and bug-reports to <E.Mergl@bawue.de>
+Please send comments and bug-reports to <modperl@apache.org>
 
 Before sending a bug report it might be useful to look at the debug output. 
 To enable debug output either place the following line in httpd.conf after 
@@ -243,9 +253,11 @@ or set the following variables in your perl script:
 
 and watch the error logfile.
 
-If this doesn't help, please mail me the debug output and 
-include the output of perl -v,
+If this doesn't help, please send a mail to <modperl@apache.org>
+and include the debug output 
+    and the output of perl -v,
     and the output of perl -V,
+    and the version of ApacheDBI,
     and the version of DBI,
     and the used database
 in your bug-report.
@@ -253,7 +265,7 @@ in your bug-report.
 
 A common problem is an error-message that $dbh will not stay 
 shared. A complete explanation for this behavior is given 
-in the FAQ. In short, instead of this:
+in the modperl-FAQ. In short, instead of this:
 
  my $dbh = ...;
  subroutine();
@@ -287,7 +299,7 @@ DBI      by Tim Bunce       dbi-users@fugue.com
 
 ---------------------------------------------------------------------------
 
-   Edmund Mergl <E.Mergl@bawue.de>                           July 16, 1998
+   Edmund Mergl <E.Mergl@bawue.de>                       September 08, 1998
 
 
 ---------------------------------------------------------------------------

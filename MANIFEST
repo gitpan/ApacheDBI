@@ -6,5 +6,5 @@ DebugDBI.pm
 MANIFEST
 Makefile.PL
 README
-startup.pl
+eg/startup.pl
 test.pl

@@ -6,11 +6,11 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthzDBI.pm,v 1.10 1998/07/26 05:30:53 mergl Exp $
+#$Id: AuthzDBI.pm,v 1.14 1998/09/08 07:11:15 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::AuthzDBI::VERSION = '0.80';
+$Apache::AuthzDBI::VERSION = '0.81';
 
 $Apache::AuthzDBI::DEBUG = 0;
 
@@ -55,8 +55,13 @@ sub handler {
     my ($user_result)  = DECLINED;
     my ($group_result) = DECLINED;
 
+    # get username
     my ($user_sent) = $r->connection->user;
     print STDERR "$prefix user sent = >$user_sent<\n" if $Apache::AuthzDBI::DEBUG;
+
+    # get AuthName
+    my ($auth_name) = $r->auth_name;
+    print STDERR "$prefix AuthName = >$auth_name<\n" if $Apache::AuthenDBI::DEBUG;
 
     # get configuration
     my $attr = { };
@@ -124,7 +129,7 @@ sub handler {
 
             # check if the user is cached
             my ($group, $groups);
-            if ( ! ($groups = $Groups{$user_sent}) ) {
+            if ( ! ($groups = $Groups{"$auth_name,$user_sent"}) ) {
 
                 unless ( $attr->{data_source} ) {
                     $r->log_reason("missing source parameter for database connect", $r->uri);
@@ -179,13 +184,13 @@ sub handler {
                 $dbh->disconnect;
 
                 # cache userid/groups if cache_time is configured
-                $Groups{$user_sent} = $groups if $attr->{cache_time} > 0;
+                $Groups{"$auth_name,$user_sent"} = $groups if $attr->{cache_time} > 0;
 	    }
             $r->subprocess_env(REMOTE_GROUPS => $groups);
             print STDERR "$prefix groups = >$groups<\n" if $Apache::AuthzDBI::DEBUG;
 
             # update timestamp if cache_time is configured
-            $Time{$user_sent} = time if $attr->{cache_time} > 0;
+            $Time{"$auth_name,$user_sent"} = time if $attr->{cache_time} > 0;
 
             # skip through the required groups until the first matches
             REQUIRE: for ($i = 1; $i <= $#require; $i++ ) {
@@ -216,18 +221,18 @@ sub handler {
             print STDERR "$prefix user_result = OK: valid-user\n" if $Apache::AuthzDBI::DEBUG;
         }
 
-        # after finishing the request the handler checks the password-cache and deletes any outdated users
+        # after finishing the request the handler checks the password-cache and deletes any outdated entry
         # note: the CleanupHandler runs after the response has been sent to the client
         if($attr->{cache_time} > 0 && Apache->can('push_handlers')) {
             Apache->push_handlers(PerlCleanupHandler => sub {
                 print STDERR "$$ Apache::AuthzDBI PerlCleanupHandler \n" if $Apache::AuthzDBI::DEBUG;
                 my $now = time;
-                my $user;
-                foreach $user (keys %Groups) {
-                    if ($now - $Time{$user} >= $attr->{cache_time}) {
-                        print STDERR "$$ Apache::AuthzDBI delete $user from cache \n" if $Apache::AuthzDBI::DEBUG;
-                        delete $Groups{$user};
-                        delete $Time{$user};
+                my $key;
+                foreach $key (keys %Groups) {
+                    if ($now - $Time{$key} >= $attr->{cache_time}) {
+                        print STDERR "$$ Apache::AuthzDBI delete $key from cache \n" if $Apache::AuthzDBI::DEBUG;
+                        delete $Groups{$key};
+                        delete $Time{$key};
                     }
                 }
             });
@@ -428,7 +433,7 @@ Add the following lines to your httpd.conf or srm.conf:
 For Apache::AuthzDBI you need to enable the appropriate call-back hooks when 
 making mod_perl: 
 
-  perl Makefile.PL DO_HTTPD=1 PERL_AUTHEN=1 PERL_AUTHZ=1 PERL_CLEANUP=1 PERL_STACKED_HANDLERS=1. 
+  perl Makefile.PL PERL_AUTHEN=1 PERL_AUTHZ=1 PERL_CLEANUP=1 PERL_STACKED_HANDLERS=1. 
 
 
 =head1 SEE ALSO
