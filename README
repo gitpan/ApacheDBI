@@ -1,6 +1,6 @@
 #-------------------------------------------------------
 #
-# $Id: README,v 1.26 1998/09/08 07:11:16 mergl Exp $
+# $Id: README,v 1.26 1999/06/03 08:56:32 mergl Exp $
 #
 #-------------------------------------------------------
 
@@ -8,7 +8,7 @@
 DESCRIPTION:
 ------------
 
-This is version 0.81 of Apache::AuthenDBI.pm, Apache::AuthzDBI.pm, 
+This is version 0.82 of Apache::AuthenDBI.pm, Apache::AuthzDBI.pm, 
 Apache::DBI.pm and DebugDBI.pm.
 
 These modules are supposed to be used with the Apache server together 
@@ -24,13 +24,58 @@ o DebugDBI.pm enables debugging
 RECENT CHANGES:
 ---------------
 
-- Cache entries consider the AuthName to distinguish 
-  between identical user-ids in different authorization 
-  realms. 
+- bug-fix spotted by "Dale Manemann" <manemann@dubuque.net>:
+  correct the password handling for the case, where the password has
+  been changed in the database and the old password is still cached.
+- proposal from Honza Pazdziora <adelton@informatics.muni.cz>:
+  add PerlCleanupHandler in Apache::DBI, which issues a rollback 
+  unless AutoCommit is on. 
+- changed behavior of AuthzDBI: the first match of a
+  requirement is sufficient for successful authorization.
+  Prior to this release, all requirement lines had to 
+  be fulfilled. 
+- proposal from Rauznitz Balazs <jomagam@yahoo.com>:
+  new function all_handlers() in Apache::DBI.pm. Returns 
+  all cached database handles, so that other handlers can 
+  perform tasks on them.
+- proposal from Michael Smith <mjs@iii.co.uk>: new 
+  configuration option Auth_DBI_placeholder. Setting this 
+  option to true, will use placeholders for the given userid 
+  in the SELECT statements. This will speedup database access. 
+- proposal from "Jordi 'Matematic' Salvat" <jordi@webarna.com>:
+  replace AuthName with a summary of all attributes relevant
+  for the select statements. This still keeps the userid entries
+  in the cache unique, but solves the problem with different 
+  AuthNames which eventually forces the user to authenticate 
+  several times. 
+- new configuration option Auth_DBI_expeditive from
+  "Jordi 'Matematic' Salvat" <jordi@webarna.com>. 
+  When authorization fails, AuthzDBI returns AUTH_REQUIRED
+  as default. With Auth_DBI_expeditive set to "on" it returns
+  FORBIDDEN if access is denied. Hence this can be distinguished 
+  from the case, where the user just mistyped the password.
+- applied patch from Ask Bjoern Hansen <ask@valueclick.com>:
+  get rid of some annoying "Use of uninitialized value ..."
+- applied patch from Joshua Chamas <joshua@chamas.com>:
+  use eval{ping} to prevent using an invalid database handle.
+- added 'use Apache;' to Apache::DBI.pm as proposed by
+  Michael Smith <mjs@iii.co.uk>.
+- implemented multiple passwords per userid as proposed by
+  dan hammer <dhammer@verio.net>.
+- applied patch for case-insensitive user-ids from 
+  <grussell@wiley.com>. 
+- implement proposal from Honza Pazdziora <adelton@informatics.muni.cz>:
+  Auth_DBI_casesensitive replaced by Auth_DBI_uidcasesensitive and 
+  Auth_DBI_pwdcasesensitive. 
+- applied patch from fdc@cliwe.ping.de (Frank D. Cringle):
+  prevent "Use of uninitialized value warning" in error.log.
+- work-around for mod_perl problem spotted by Mike Hayward 
+  <hayward@loup.net>: when building mod_perl as dso, Apache::DBI 
+  was always skipping the connection cache.
 
 
-EXAMPLE:
---------
+EXAMPLES:
+---------
 
 Here we explain only some simple examples. For further information and 
 limitations please read the module documentation. 
@@ -294,12 +339,12 @@ mod_perl by Doug MacEachern modperl@apache.org
                             http://perl.apache.org/
 
 DBI      by Tim Bunce       dbi-users@fugue.com
-                            http://www.hermetica.com/technologia/DBI/
+                            http://www.symbolstone.org/technology/perl/DBI/
 
 
 ---------------------------------------------------------------------------
 
-   Edmund Mergl <E.Mergl@bawue.de>                       September 08, 1998
+   Edmund Mergl <E.Mergl@bawue.de>                          June 3, 1999
 
 
 ---------------------------------------------------------------------------

@@ -1,32 +1,34 @@
 package Apache::AuthzDBI;
 
 use Apache ();
-use Apache::Constants qw(OK AUTH_REQUIRED DECLINED SERVER_ERROR);
+use Apache::Constants qw(OK AUTH_REQUIRED FORBIDDEN DECLINED SERVER_ERROR);
 use DBI ();
 
 use strict;
 
-#$Id: AuthzDBI.pm,v 1.14 1998/09/08 07:11:15 mergl Exp $
+#$Id: AuthzDBI.pm,v 1.19 1999/06/03 08:54:55 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::AuthzDBI::VERSION = '0.81';
+$Apache::AuthzDBI::VERSION = '0.82';
 
 $Apache::AuthzDBI::DEBUG = 0;
 
 
 my %Config = (
-    'Auth_DBI_data_source'     => '',
-    'Auth_DBI_username'        => '',
-    'Auth_DBI_password'        => '',
-    'Auth_DBI_pwd_table'       => '',
-    'Auth_DBI_uid_field'       => '',
-    'Auth_DBI_grp_table'       => '',
-    'Auth_DBI_grp_field'       => '',
-    'Auth_DBI_grp_whereclause' => '',
-    'Auth_DBI_authoritative'   => 'on',
-    'Auth_DBI_casesensitive'   => 'on',
-    'Auth_DBI_cache_time'      => 0,
+    'Auth_DBI_data_source'      => '',
+    'Auth_DBI_username'         => '',
+    'Auth_DBI_password'         => '',
+    'Auth_DBI_pwd_table'        => '',
+    'Auth_DBI_uid_field'        => '',
+    'Auth_DBI_grp_table'        => '',
+    'Auth_DBI_grp_field'        => '',
+    'Auth_DBI_grp_whereclause'  => '',
+    'Auth_DBI_authoritative'    => 'on',
+    'Auth_DBI_uidcasesensitive' => 'on',
+    'Auth_DBI_cache_time'       => 0,
+    'Auth_DBI_expeditive'       => 'off',
+    'Auth_DBI_placeholder'      => 'off',
 );
 
 # global cache
@@ -41,7 +43,7 @@ sub handler {
 
     my ($prefix) = "$$ Apache::AuthzDBI";
 
-    if ( $Apache::AuthzDBI::DEBUG ) {
+    if ($Apache::AuthzDBI::DEBUG) {
         my ($type) = '';
         $type .= 'initial ' if $r->is_initial_req;
         $type .= 'main'     if $r->is_main;
@@ -59,198 +61,202 @@ sub handler {
     my ($user_sent) = $r->connection->user;
     print STDERR "$prefix user sent = >$user_sent<\n" if $Apache::AuthzDBI::DEBUG;
 
-    # get AuthName
-    my ($auth_name) = $r->auth_name;
-    print STDERR "$prefix AuthName = >$auth_name<\n" if $Apache::AuthenDBI::DEBUG;
-
     # get configuration
     my $attr = { };
     while(($key, $val) = each %Config) {
         $val = $r->dir_config($key) || $val;
         $key =~ s/^Auth_DBI_//;
         $attr->{$key} = $val;
-        printf STDERR "$prefix Config{ %-15s } = %s\n", $key, $val if $Apache::AuthzDBI::DEBUG;
+        printf STDERR "$prefix Config{ %-16s } = %s\n", $key, $val if $Apache::AuthzDBI::DEBUG;
     }
 
     # if not configured decline
-    unless ( $attr->{pwd_table} && $attr->{uid_field} && $attr->{grp_field} ) {
+    unless ($attr->{pwd_table} && $attr->{uid_field} && $attr->{grp_field}) {
         printf STDERR "$prefix not configured, return DECLINED\n" if $Apache::AuthzDBI::DEBUG;
         return DECLINED;
     }
 
     # Do we want Windows-like case-insensitivity?
-    if ($attr->{casesensitive} eq "off")
-    {
-       $user_sent = lc($user_sent);
-    }
+    $user_sent = lc($user_sent) if $attr->{uidcasesensitive} eq "off";
 
-    # check requirements
+    # select code to return if authorization is denied:
+    my $authz_denied= $attr->{expeditive} eq 'on' ? FORBIDDEN : AUTH_REQUIRED;
+
+    # obtain the cache hashes to use:
+    my $attr_summary= join $;, $attr->{data_source}, $attr->{grp_table} || $attr->{pwd_table}, $attr->{uid_field}, $attr->{grp_field}, $attr->{grp_whereclause};
+    $Groups{$attr_summary} = {} unless defined $Groups{$attr_summary};
+    $Time{$attr_summary}   = {} unless defined $Time{$attr_summary};
+    my $Groups = $Groups{$attr_summary};
+    my $Time   = $Time{$attr_summary};
+
+    # check if requirements exists
     my ($ary_ref) = $r->requires;
-    unless ( $ary_ref ) {
-        if ( $attr->{authoritative} eq 'on' ) {
+    unless ($ary_ref) {
+        if ($attr->{authoritative} eq 'on') {
             $r->log_reason("user $user_sent denied, no access rules specified (DBI-Authoritative)", $r->uri);
-            $r->note_basic_auth_failure;
-            return AUTH_REQUIRED;
+            $r->note_basic_auth_failure if $authz_denied == AUTH_REQUIRED;
+            return $authz_denied;
         }
         printf STDERR "$prefix no requirements and not authoritative, return DECLINED\n" if $Apache::AuthzDBI::DEBUG;
         return DECLINED;
     }
 
-    # iterate over all requirement directives
-    my($hash_ref, @require);
+    # iterate over all requirement directives and store them according to their type (valid-user, user, group)
+    my($hash_ref, $valid_user, $user_requirements, $group_requirements, @require);
     foreach $hash_ref (@$ary_ref) {
         while (($key,$val) = each %$hash_ref) {
             last if $key eq 'requirement';
         }
-        print STDERR "$prefix requirement: $val\n" if $Apache::AuthzDBI::DEBUG;
         $val =~ s/^\s*require\s+//;
-        @require = split /\s+/, $val;
-
-        # check for user
-        if ( $user_result != OK && $require[0] eq 'user' ) {
-            $user_result = AUTH_REQUIRED;
-            for ($i = 1; $i <= $#require; $i++ ) {
-                if ( $require[$i] eq $user_sent ) {
-                    print STDERR "$prefix user_result = OK: $require[$i] = $user_sent\n" if $Apache::AuthzDBI::DEBUG;
-                    $user_result = OK;
-                    last;
-               }
-            }
-            if ( $attr->{authoritative} eq 'on' && $user_result != OK ) {
-                $r->log_reason("User $user_sent not found, (DBI-Authoritative)", $r->uri);
-                $r->note_basic_auth_failure;
-                return AUTH_REQUIRED;
-            }
+        # handle different requirement-types
+        if ($val =~ /valid-user/) {
+            $valid_user = 1;
+        } elsif ($val =~ s/^user\s+//go) {
+            $user_requirements .= " $val";
+        } elsif ($val =~ s/^group\s+//go) {
+            $group_requirements .= " $val";
         }
+    }
+    $user_requirements  =~ s/^ //go;
+    $group_requirements =~ s/^ //go;
+    print STDERR "$prefix requirements: valid-user=>$valid_user< user=>$user_requirements< group=>$group_requirements< \n"  if $Apache::AuthzDBI::DEBUG;
 
-        # check for group
-        if ( $group_result != OK && $require[0] eq 'group' ) {
-            $group_result = AUTH_REQUIRED;
+    # check for valid-user
+    if ($valid_user) {
+        $user_result = OK;
+        print STDERR "$prefix user_result = OK: valid-user\n" if $Apache::AuthzDBI::DEBUG;
+    }
 
-            # check if the user is cached
-            my ($group, $groups);
-            if ( ! ($groups = $Groups{"$auth_name,$user_sent"}) ) {
+    # check for users
+    if ($user_result != OK && $user_requirements) {
+        $user_result = AUTH_REQUIRED;
+        my $user_required;
+        @require = split /\s+/, $user_requirements;
+        foreach $user_required (@require) {
+            if ($user_required eq $user_sent) {
+                print STDERR "$prefix user_result = OK: $user_required = $user_sent\n" if $Apache::AuthzDBI::DEBUG;
+                $user_result = OK;
+                last;
+           }
+        }
+    }
 
-                unless ( $attr->{data_source} ) {
-                    $r->log_reason("missing source parameter for database connect", $r->uri);
-                    return SERVER_ERROR;
-                }
+    # check for groups
+    if ($user_result != OK && $group_requirements) {
+        $group_result = AUTH_REQUIRED;
+        # check if the user is cached
+        my ($group, $groups);
 
-                # connect to database
-                my $dbh;
-                unless ($dbh = DBI->connect($attr->{data_source}, $attr->{username}, $attr->{password})) {
-                    $r->log_reason("db connect error with $attr->{data_source}", $r->uri);
-                    return SERVER_ERROR;
-                }
+        if (!($groups = $Groups->{$user_sent})) {
+            unless ($attr->{data_source}) {
+                $r->log_reason("missing source parameter for database connect", $r->uri);
+                return SERVER_ERROR;
+            }
 
-                # generate statement
-                my $user_sent_quoted = $dbh->quote($user_sent);
-                my $statement;
-                if ($attr->{grp_table}) {
-                    $statement = "SELECT $attr->{grp_field} FROM $attr->{grp_table} WHERE $attr->{uid_field}=$user_sent_quoted";
-                } else {
-                    $statement = "SELECT $attr->{grp_field} FROM $attr->{pwd_table} WHERE $attr->{uid_field}=$user_sent_quoted";
-                }
-                if ($attr->{grp_whereclause}) {
-                    $statement .= " AND $attr->{grp_whereclause}";
-                }
-                print STDERR "$prefix statement = $statement\n" if $Apache::AuthzDBI::DEBUG;
+            # connect to database
+            my $dbh;
+            unless ($dbh = DBI->connect($attr->{data_source}, $attr->{username}, $attr->{password})) {
+                $r->log_reason("db connect error with $attr->{data_source}", $r->uri);
+                return SERVER_ERROR;
+            }
 
-                # prepare statement
-                my $sth;
-                unless ($sth = $dbh->prepare($statement)) {
-                    $r->log_reason("can not prepare statement: $DBI::errstr", $r->uri);
-                    $dbh->disconnect;
-                    return SERVER_ERROR;
-                }
+            # generate statement
+            my $user_sent_quoted = $dbh->quote($user_sent);
+            my $select    = "SELECT $attr->{grp_field}";
+            my $from      = ($attr->{grp_table}) ? "FROM $attr->{grp_table}" : "FROM $attr->{pwd_table}";
+            my $where     = ($attr->{uidcasesensitive} eq "off") ? "WHERE lower($attr->{uid_field}) =" : "WHERE $attr->{uid_field} =";
+            my $compare   = ($attr->{placeholder}      eq "on")  ? "?" : "$user_sent_quoted";
+            my $statement = "$select $from $where $compare";
+            $statement   .= " AND $attr->{grp_whereclause}" if ($attr->{grp_whereclause});
+            print STDERR "$prefix statement = $statement\n" if $Apache::AuthzDBI::DEBUG;
 
-                # execute statement
-                my $rv;
-                unless ($rv = $sth->execute) {
-                    $r->log_reason("can not execute statement: $DBI::errstr", $r->uri);
-                    $dbh->disconnect;
-                    return SERVER_ERROR;
-                }
-
-                # fetch result and build comma separated group-list
-                while ( $group = $sth->fetchrow_array ) {
-                    # strip trailing blanks for fixed-length datatype
-                    $group =~ s/ +$//;
-                    $groups .= "," if $groups;
-                    $groups .= $group;
-                }
-
-                $sth->finish;
+            # prepare statement
+            my $sth;
+            unless ($sth = $dbh->prepare($statement)) {
+                $r->log_reason("can not prepare statement: $DBI::errstr", $r->uri);
                 $dbh->disconnect;
+                return SERVER_ERROR;
+            }
 
-                # cache userid/groups if cache_time is configured
-                $Groups{"$auth_name,$user_sent"} = $groups if $attr->{cache_time} > 0;
-	    }
-            $r->subprocess_env(REMOTE_GROUPS => $groups);
-            print STDERR "$prefix groups = >$groups<\n" if $Apache::AuthzDBI::DEBUG;
+            # execute statement
+            my $rv;
+            unless ($rv = ($attr->{placeholder} eq "on") ? $sth->execute($user_sent_quoted) : $sth->execute) {
+                $r->log_reason("can not execute statement: $DBI::errstr", $r->uri);
+                $dbh->disconnect;
+                return SERVER_ERROR;
+            }
 
-            # update timestamp if cache_time is configured
-            $Time{"$auth_name,$user_sent"} = time if $attr->{cache_time} > 0;
+            # fetch result and build comma separated group-list
+            while ( $group = $sth->fetchrow_array ) {
+                # strip trailing blanks for fixed-length data-type
+                $group =~ s/ +$//;
+                $groups .= ",$group";
+            }
+            $groups =~ s/^,//go;
 
-            # skip through the required groups until the first matches
-            REQUIRE: for ($i = 1; $i <= $#require; $i++ ) {
+            $sth->finish;
+            $dbh->disconnect;
 
-		foreach $group (split ',', $groups) {
+            # cache userid/groups if cache_time is configured
+            $Groups->{$user_sent} = $groups if $attr->{cache_time} > 0;
+        }
+        $r->subprocess_env(REMOTE_GROUPS => $groups);
+        print STDERR "$prefix groups = >$groups<\n" if $Apache::AuthzDBI::DEBUG;
 
-                    # check group
-                    if ( $require[$i] eq $group ) {
-                        $group_result = OK;
-                        $r->subprocess_env(REMOTE_GROUP => $group);
-                        print STDERR "$prefix group_result = OK: $require[$i] = $group\n" if $Apache::AuthzDBI::DEBUG;
-                        last REQUIRE;
-                    }
+        # update timestamp if cache_time is configured
+        $Time->{$user_sent} = time if $attr->{cache_time} > 0;
+
+        # skip through the required groups until the first matches
+        my $group_required;
+        @require = split /\s+/, $group_requirements;
+        REQUIRE: foreach $group_required (@require) {
+            foreach $group (split ',', $groups) {
+                # check group
+                if ($group_required eq $group) {
+                    $group_result = OK;
+                    $r->subprocess_env(REMOTE_GROUP => $group);
+                    print STDERR "$prefix group_result = OK: $group_required = $group\n" if $Apache::AuthzDBI::DEBUG;
+                    last REQUIRE;
                 }
-	    }
-
-            # no group found
-            if ( $attr->{authoritative} eq 'on' && $group_result != OK ) {
-                $r->log_reason("user $user_sent not in right groups, (DBI-Authoritative)", $r->uri);
-                $r->note_basic_auth_failure;
-                return AUTH_REQUIRED;
             }
         }
+    }
 
-        # check for valid-user
-        if ( $require[0] eq 'valid-user' ) {
-            $user_result = OK;
-            print STDERR "$prefix user_result = OK: valid-user\n" if $Apache::AuthzDBI::DEBUG;
-        }
+    # check the results of the requirement checks
+    if ($attr->{authoritative} eq 'on' && $user_result != OK && $group_result != OK) {
+        my $reason;
+        $reason .= " USER"  if $user_result  == AUTH_REQUIRED;
+        $reason .= " GROUP" if $group_result == AUTH_REQUIRED;
+        $r->log_reason("DBI-Authoritative: Access denied on $reason rule(s)", $r->uri);
+        $r->note_basic_auth_failure if $authz_denied == AUTH_REQUIRED;
+        return $authz_denied;
+    }
 
-        # after finishing the request the handler checks the password-cache and deletes any outdated entry
-        # note: the CleanupHandler runs after the response has been sent to the client
-        if($attr->{cache_time} > 0 && Apache->can('push_handlers')) {
-            Apache->push_handlers(PerlCleanupHandler => sub {
-                print STDERR "$$ Apache::AuthzDBI PerlCleanupHandler \n" if $Apache::AuthzDBI::DEBUG;
-                my $now = time;
-                my $key;
-                foreach $key (keys %Groups) {
-                    if ($now - $Time{$key} >= $attr->{cache_time}) {
-                        print STDERR "$$ Apache::AuthzDBI delete $key from cache \n" if $Apache::AuthzDBI::DEBUG;
-                        delete $Groups{$key};
-                        delete $Time{$key};
-                    }
+    # after finishing the request the handler checks the password-cache and deletes any outdated entry
+    # note: the CleanupHandler runs after the response has been sent to the client
+    if($attr->{cache_time} > 0 && Apache->can('push_handlers')) {
+        print STDERR "$$ Apache::AuthzDBI push PerlCleanupHandler \n" if $Apache::AuthzDBI::DEBUG;
+        Apache->push_handlers("PerlCleanupHandler", sub {
+            print STDERR "$$ Apache::AuthzDBI PerlCleanupHandler \n" if $Apache::AuthzDBI::DEBUG;
+            my ($user, $diff);
+            foreach $user (keys %$Groups) {
+                $diff = time - $Time->{$user};
+                if ($diff >= $attr->{cache_time}) {
+                    print STDERR "$$ Apache::AuthzDBI delete $user from cache, last access before $diff seconds \n" if $Apache::AuthzDBI::DEBUG;
+                    delete $Groups->{$user};
+                    delete $Time->{$user};
                 }
-            });
-        }
+            }
+        });
     }
 
-    if ( $attr->{authoritative} eq 'on' &&
-        ($group_result == AUTH_REQUIRED || $user_result == AUTH_REQUIRED) ) {
-        my ($reason) = ($group_result == AUTH_REQUIRED) ? 'USER' : 'GROUP';
-	$r->log_reason("DBI-Authoritative: Access denied on $reason rule(s)", $r->uri);
-	return AUTH_REQUIRED;
-    }
-
-    if ( $user_result == OK || $group_result == OK ) {
+    # return OK if authorization was successful
+    if ($user_result == OK || $group_result == OK) {
         printf STDERR "$prefix return OK\n" if $Apache::AuthzDBI::DEBUG;
-	return OK;
+        return OK;
     }
 
+    # otherwise fall through
     printf STDERR "$prefix fall through, return DECLINED\n" if $Apache::AuthzDBI::DEBUG;
     return DECLINED;
 }
@@ -296,6 +302,7 @@ Apache::AuthzDBI - Authorization via Perl's DBI
 The AuthType is limited to Basic. You may use one or more valid require 
 lines. For a single require line with the tokens valid-user or with  
 distinct user names it is sufficient to use only the AuthenDBI module. 
+This module needs Apache::AuthenDBI, it can not be used stand-alone !
 
 
 =head1 DESCRIPTION
@@ -303,26 +310,27 @@ distinct user names it is sufficient to use only the AuthenDBI module.
 This module allows authorization against a database using Perl's DBI. 
 For supported DBI drivers see: 
 
- http://www.hermetica.com/technologia/DBI/
+ http://www.symbolstone.org/technology/perl/DBI/
 
 When the authorization handler is called, the authentication has already been 
 done. This means, that the given username/password has been validated. 
 
 The handler analyzes and processes the requirements line by line. The request 
-is accepted only if all requirement lines are accepted. 
+is accepted if the first requirement is fulfilled. 
+
+In case of 'valid-user' the request is accepted. 
 
 In case of one or more user-names, they are compared with the given user-name 
-until the first match. If there is no match and the authoritative directive 
-is set to 'on' the request is rejected. 
+until the first match. 
 
 In case of one or more group-names, all groups of the given user-name are 
 looked up in the cache. If the user is not found in the cache, the groups are 
 requested from the database. A comma separated list of all these groups is put 
 into the environment variable REMOTE_GROUPS. Then these groups are compared 
-with the required groups until the first match. If there is no match and the 
-authoritative directive is set to 'on' the request is rejected. 
+with the required groups until the first match. 
 
-In case of 'valid-user' the request is accepted. 
+If there is no match and the authoritative directive 
+is set to 'on' the request is rejected. 
 
 In case the authorization succeeds, the environment variable REMOTE_GROUP is 
 set to the group name, so scripts that are protected by AuthzDBI don't need to 
@@ -400,18 +408,35 @@ is set to 'off', control is passed on to any other authorization modules. Be
 sure you know what you are doing when you decide to switch it off. 
 
 =item *
-Auth_DBI_casesensitive  < on / off >
+Auth_DBI_uidcasesensitive  < on / off >
 
-Default is 'on'. When set 'off', the entered userid and password is converted 
-to lower case. 
+Default is 'on'. When set 'off', the entered userid is converted to lower case. 
+Also the userid in the password select-statement is converted to lower case. 
 
 =item *
 Auth_DBI_cache_time
-Default is 0 = off. When set to any value > 0, the groups of all users will 
-be cached. After finishing the request, a special handler skips through the 
-cache and deletes all outdated entries (entries, which are older than the 
-cache_time). 
 
+Default is 0 = off. When set to any value n > 0, the groups of all users will 
+be cached for n seconds. After finishing the request, a special handler skips 
+through the cache and deletes all outdated entries (entries, which are older 
+than the cache_time). 
+
+=item *
+Auth_DBI_expeditive
+
+Default is 'off'. When set to 'on', the result of an authorization failure
+is an 'Access Forbidden' code instead of 'Authentication Required'. This is
+less convenient in a few cases because it doesn't allow users to 'switch
+identities' w/o closing the browser, but is formally more correct and allows
+support persons to easily diagnose whether the problem is in authentication
+(wrong password) or in authorization (wrong permissions).
+
+=item *
+
+Auth_DBI_placeholder < on / off >
+Default is 'off'.  When set 'on', the select statement is prepared using a placeholder 
+for the username.  This may result in improved performance for databases supporting this method.
+ 
 
 =head1 CONFIGURATION
 
@@ -444,7 +469,7 @@ L<Apache>, L<mod_perl>, L<DBI>
 =head1 AUTHORS
 
 =item *
-mod_perl by Doug MacEachern <dougm@osf.org>
+mod_perl by Doug MacEachern <dougm@telebusiness.co.nz>
 
 =item *
 DBI by Tim Bunce <Tim.Bunce@ig.co.uk>

@@ -1,19 +1,21 @@
 package Apache::DBI;
 
+use Apache ();
 use DBI ();
 use strict;
 
-#$Id: DBI.pm,v 1.25 1998/09/08 07:11:15 mergl Exp $
+#$Id: DBI.pm,v 1.32 1999/06/03 07:37:36 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::DBI::VERSION = '0.81';
+$Apache::DBI::VERSION = '0.82';
 
 $Apache::DBI::DEBUG = 0;
 
 
 my %Connected;
 my @ChildConnect;
+my %Rollback;
 
 
 # supposed to be called in a startup file
@@ -23,10 +25,13 @@ sub connect_on_init { push @ChildConnect, [@_] }
 if(Apache->can('push_handlers')) {
     Apache->push_handlers(PerlChildInitHandler => sub {
        print STDERR "$$ Apache::DBI PerlChildInitHandler \n" if $Apache::DBI::DEBUG;
-       for my $aref (@ChildConnect) {
-           shift @$aref;
-           DBI->connect(@$aref);
+       if (defined @ChildConnect) {
+           for my $aref (@ChildConnect) {
+              shift @$aref;
+              DBI->connect(@$aref);
+	  }
        }
+       1;
     });
 }
 
@@ -37,15 +42,14 @@ sub connect {
     unshift @_, $class if ref $class;
     my $drh  = shift;
     my @args = map { defined $_ ? $_ : "" } @_;
-    my $idx  = "$args[0]~$args[1]~$args[2]";
+    my $idx  = join $;, $args[0], $args[1], $args[2];
 
     # the hash-reference differs between calls even in the same
-    # process, so dereference the hash-reference 
-
+    # process, so de-reference the hash-reference 
     my ($key, $val);
     if (3 == $#args && ref $args[3] eq "HASH") {
        while (($key,$val) = each %{$args[3]}) {
-           $idx .= "~$key=$val";
+           $idx .= "$;$key=$val";
        }
     } elsif (3 == $#args) {
         pop @args;
@@ -55,38 +59,73 @@ sub connect {
     # won't be useful after ChildInit, since multiple processes trying to
     # work over the same database connection simultaneously will receive
     # unpredictable query results.
-
-    if ($Apache::ServerStarting) {
+    if ($Apache::ServerStarting == 1) {
         print STDERR "$$ Apache::DBI skipping connection cache during server startup\n" if $Apache::DBI::DEBUG;
         return $drh->connect(@args);
     }
 
-    # check first if there is already a database-handle cached
-    # if this is the case, verifiy the database-handle using the 
-    # ping-method.
+    # this PerlCleanupHandler is supposed to initiate a rollback after the script has 
+    # finished unless AutoCommit is on.
+    # note: the PerlCleanupHandler runs after the response has been sent to the client
+    if(!$Rollback{$idx} && Apache->can('push_handlers')) {
+        print STDERR "$$ Apache::DBI push PerlCleanupHandler \n" if $Apache::DBI::DEBUG;
+        Apache->push_handlers("PerlCleanupHandler", sub {
+            print STDERR "$$ Apache::DBI PerlCleanupHandler \n" if $Apache::DBI::DEBUG;
+            my $dbh = $Connected{$idx};
+            if ($Rollback{$idx} && $dbh && $dbh->{Active} && !$dbh->{AutoCommit} && eval {$dbh->rollback}) {
+                print STDERR "$$ Apache::DBI rollback for $idx \n" if $Apache::DBI::DEBUG;
+                delete $Rollback{$idx};
+            }
+	});
+        # make sure, that the rollback is called only once for every 
+        # request, even if the script calls connect more than once
+        $Rollback{$idx} = 1;
+    }
 
-    if (($Connected{$idx} && $Connected{$idx}->ping)) {
+    # check first if there is already a database-handle cached
+    # if this is the case, verify the database-handle using the
+    # ping-method. Use eval for checking the connection handle
+    # in order to avoid problems (dying inside ping) when RaiseError 
+    # being on and the handle is invalid. 
+    if ($Connected{$idx} && eval{$Connected{$idx}->ping}) {
         print STDERR "$$ Apache::DBI already connected to '$idx'\n" if $Apache::DBI::DEBUG;
         return (bless $Connected{$idx}, 'Apache::DBI::db');
     }
 
     # either there is no database handle-cached or it is not valid,
-    # so get a new database-handle and store it in the chache
-
-    $Connected{$idx} = undef;
+    # so get a new database-handle and store it in the cache
+    delete $Connected{$idx};
     $Connected{$idx} = $drh->connect(@args);
-    return undef if ! $Connected{$idx};
+    return undef if !$Connected{$idx};
+
+    # return the new database handle
     print STDERR "$$ Apache::DBI new connect to '$idx'\n" if $Apache::DBI::DEBUG;
     return (bless $Connected{$idx}, 'Apache::DBI::db');
 }
+
+
+
+
+# this function can be called from another handler like
+# PerlLogHandler or PerlChildExitHandler to perform
+# tasks on all cached database handles.
+
+sub all_handlers {
+  return \%Connected;
+}
+
 
 
 { package Apache::DBI::db;
   no strict;
   @ISA=qw(DBI::db);
   use strict;
-  sub disconnect {1};
+  sub disconnect {
+      print STDERR "$$ Apache::DBI disconnect (overloaded) \n" if $Apache::DBI::DEBUG;
+      return 1
+  };
 }
+
 
 
 Apache::Status->menu_item(
@@ -96,7 +135,7 @@ Apache::Status->menu_item(
         my($r, $q) = @_;
         my(@s) = qw(<TABLE><TR><TD>Datasource</TD><TD>Username</TD></TR>);
         for (keys %Connected) {
-            push @s, '<TR><TD>', join('</TD><TD>', (split('~', $_))[0,1]), "</TD></TR>\n";
+            push @s, '<TR><TD>', join('</TD><TD>', (split($;, $_))[0,1]), "</TD></TR>\n";
         }
         push @s, '</TABLE>';
         return \@s;
@@ -128,7 +167,7 @@ This module initiates a persistent database connection.
 
 The database access uses Perl's DBI. For supported DBI drivers see: 
 
- http://www.hermetica.com/technologia/DBI/
+ http://www.symbolstone.org/technology/perl/DBI/
 
 When loading the DBI module (do not confuse this with the Apache::DBI module) 
 it looks if the environment variable GATEWAY_INTERFACE starts with 'CGI-Perl' 
@@ -185,6 +224,19 @@ Here is generalized ping method, which can be added to the driver module:
     }
 }
 
+Transactions: a standard perl script will automatically perform a rollback
+whenever the script exits. In the case of persistent database connections,
+the database handle will not be destroyed and hence no automatic rollback 
+occurs. At a first glance it seems even to be possible, to handle a transaction 
+over multiple requests. But this should be avoided, because different
+requests are handled by different httpd's and a httpd does not know the state 
+of a specific transaction which has been started by another httpd. In general 
+it is good practice to perform an explicit commit or rollback at the end of 
+every script. In order to avoid inconsistencies in the database in case 
+AutoCommit is off and the script finishes without an explicit rollback, the 
+Apache::DBI module uses a PerlCleanupHandler to issue a rollback at the
+end of every request. 
+
 This module plugs in a menu item for Apache::Status. The menu lists the 
 current database connections. It should be considered incomplete because of 
 the limitations explained above. It shows the current database connections 
@@ -234,7 +286,7 @@ L<Apache>, L<mod_perl>, L<DBI>
 =head1 AUTHORS
 
 =item *
-mod_perl by Doug MacEachern <dougm@osf.org>
+mod_perl by Doug MacEachern <dougm@telebusiness.co.nz>
 
 =item *
 DBI by Tim Bunce <Tim.Bunce@ig.co.uk>
