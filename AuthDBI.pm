@@ -6,11 +6,11 @@ use DBI ();
 use IPC::SysV qw( IPC_CREAT IPC_RMID S_IRUSR S_IWUSR );
 use strict;
 
-# $Id: AuthDBI.pm,v 1.5 1999/09/28 16:13:32 mergl Exp $
+# $Id: AuthDBI.pm,v 1.6 2001/01/12 18:59:00 mergl Exp $
 
 require_version DBI 1.00;
 
-$Apache::AuthDBI::VERSION = '0.87';
+$Apache::AuthDBI::VERSION = '0.88';
 
 # 1: report about cache miss
 # 2: full debug output
@@ -192,7 +192,7 @@ sub authen {
     my @data_sources = split(/~/, $Attr->{data_source});
     my @usernames    = split(/~/, $Attr->{username});
     my @passwords    = split(/~/, $Attr->{password});
-    $data_sources[0] = '' unless defined($data_sources[0]); # use ENV{DBI_DSN} if not defined
+    $data_sources[0] = '' unless $data_sources[0]; # use ENV{DBI_DSN} if not defined
 
     # obtain the id for the cache
     my $data_src = $Attr->{data_source};
@@ -435,7 +435,7 @@ sub authz {
     my @data_sources = split(/~/, $Attr->{data_source});
     my @usernames    = split(/~/, $Attr->{username});
     my @passwords    = split(/~/, $Attr->{password});
-    @data_sources = '' unless defined(@data_sources); # use ENV{DBI_DSN}
+    $data_sources[0] = '' unless $data_sources[0]; # use ENV{DBI_DSN} if not defined
 
     # if not configured decline
     unless ($Attr->{pwd_table} && $Attr->{uid_field} && $Attr->{grp_field}) {
@@ -646,11 +646,17 @@ sub authz {
 sub childinit {
     my $prefix = "$$ Apache::AuthDBI         PerlChildInitHandler";
     # create (or re-use existing) semaphore set
-    $SEMID = semget($SHMKEY, 1, IPC_CREAT|S_IRUSR|S_IWUSR) or print STDERR "$prefix semget failed \n";
-    return unless $SEMID;
+    $SEMID = semget($SHMKEY, 1, IPC_CREAT|S_IRUSR|S_IWUSR);
+    if (!defined($SEMID)) {
+      print STDERR "$prefix semget failed \n";
+      return;
+    }
     # create (or re-use existing) shared memory segment
-    $SHMID = shmget($SHMKEY, $SHMSIZE, IPC_CREAT|S_IRUSR|S_IWUSR) or print STDERR "$prefix shmget failed \n";
-    return unless $SHMID;
+    $SHMID = shmget($SHMKEY, $SHMSIZE, IPC_CREAT|S_IRUSR|S_IWUSR);
+    if (!defined($SHMID)) {
+      print STDERR "$prefix shmget failed \n";
+      return;
+    }
     # make ids accessible to other handlers
     $ENV{AUTH_SEMID} = $SEMID;
     $ENV{AUTH_SHMID} = $SHMID;

@@ -4,11 +4,11 @@ use Apache ();
 use DBI ();
 use strict;
 
-# $Id: DBI.pm,v 1.44 1999/09/28 16:13:32 mergl Exp $
+# $Id: DBI.pm,v 1.45 2001/01/12 18:59:00 mergl Exp $
 
 require_version DBI 1.00;
 
-$Apache::DBI::VERSION = '0.87';
+$Apache::DBI::VERSION = '0.88';
 
 # 1: report about new connect
 # 2: full debug output
@@ -97,10 +97,10 @@ sub connect {
     }
 
     # do we need to ping the database ?
-    $PingTimeOut{$dsn}  = 0 unless defined($PingTimeOut{$dsn});
-    $LastPingTime{$dsn} = 0 unless defined($LastPingTime{$dsn});
+    $PingTimeOut{$dsn}  = 0 unless $PingTimeOut{$dsn};
+    $LastPingTime{$dsn} = 0 unless $LastPingTime{$dsn};
     my $now = time;
-    my $needping = ($PingTimeOut{$dsn} >= 0 and $now - $LastPingTime{$dsn} > $PingTimeOut{$dsn}) ? 1 : 0;
+    my $needping = (($PingTimeOut{$dsn} == 0 or $PingTimeOut{$dsn} > 0) and $now - $LastPingTime{$dsn} > $PingTimeOut{$dsn}) ? 1 : 0;
     print STDERR "$prefix need ping: ", $needping == 1 ? "yes" : "no", "\n" if $Apache::DBI::DEBUG > 1;
     $LastPingTime{$dsn} = $now;
 
@@ -132,7 +132,7 @@ sub connect {
 sub childinit {
     my $prefix = "$$ Apache::DBI            ";
     print STDERR "$prefix PerlChildInitHandler \n" if $Apache::DBI::DEBUG > 1;
-    if (defined @ChildConnect) {
+    if (@ChildConnect) {
         for my $aref (@ChildConnect) {
             shift @$aref;
             DBI->connect(@$aref);
@@ -280,9 +280,7 @@ Here is generalized ping method, which can be added to the driver module:
             local $SIG{__DIE__}  = sub { return (0); };
             local $SIG{__WARN__} = sub { return (0); };
             # adapt the select statement to your database:
-            my $sth = $dbh->prepare("SELECT 1");
-            $ret = $sth && ($sth->execute);
-            $sth->finish;
+            $ret = $dbh->do('select 1');
         };
         return ($@) ? 0 : $ret;
     }
@@ -343,7 +341,7 @@ database only if the last access was more than timeout seconds before.
 For the menu item 'DBI connections' you need to call Apache::Status BEFORE 
 Apache::DBI ! For an example of the configuration order see startup.pl. 
 
-To enable debugging the variable $Apache::AuthDBI::DEBUG must be set. This 
+To enable debugging the variable $Apache::DBI::DEBUG must be set. This 
 can either be done in startup.pl or in the user script. Setting the variable 
 to 1, just reports about a new connect. Setting the variable to 2 enables full 
 debug output. 

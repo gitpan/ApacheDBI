@@ -1,5 +1,10 @@
 Revision history for ApacheDBI.
 
+0.88 January 12, 2001
+	- fix bug in child_init: consider 0 as valid result for a
+	  semaphore id.
+	- remove defined(@array), which is depreceated in perl5.6
+
 0.87 September 28, 1999
 	- fix for the usage of the environment variable DBI_DSN 
 	  introduced in 0.86 was still incomplete.

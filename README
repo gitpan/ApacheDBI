@@ -1,6 +1,6 @@
 #-------------------------------------------------------
 #
-# $Id: README,v 1.40 1999/09/28 16:13:32 mergl Exp $
+# $Id: README,v 1.41 2001/01/12 18:59:00 mergl Exp $
 #
 #-------------------------------------------------------
 
@@ -8,7 +8,7 @@
 DESCRIPTION:
 ------------
 
-This is version 0.87 of Apache::AuthDBI.pm and Apache::DBI.pm.
+This is version 0.88 of Apache::AuthDBI.pm and Apache::DBI.pm.
 
 These modules are supposed to be used with the Apache server together with 
 an embedded perl interpreter like mod_perl. They provide support for basic 
@@ -32,18 +32,9 @@ The modules have been developed on RH 6.0 with apache_1.3.6 and mod_perl-1.21.
 RECENT CHANGES:
 ---------------
 
- - in AuthDBI remove check of configured data_source in order to allow
-   the usage of the environment variable DBI_DSN. Bug spotted by
-   Oleg Bartunov <oleg@sai.msu.su>.
- - applied patch from Matt Loschert <loschert@servint.com>,
-   which avoids 'Use of uninitialized value ...' in Apache::DBI.
- - added new attribute 'Auth_DBI_encryption_salt' as proposed by
-   Nathan Clemons <nathan@windsofstorm.net>.
-   Per default this is set to 'password' which will use the password
-   as salt for the crypt function. Setting this to 'userid' will use
-   the userid as salt.
- - fixed bug with setting Auth_DBI_nopasswd to 'on', spotted by
-   "Sigurjon Olafsson" <sigurjon@gm.is>.
+- fix bug in child_init: consider 0 as valid result for a
+  semaphore id.
+- remove defined(@array), which is depreceated in perl5.6
 
 
 EXAMPLES:
@@ -318,7 +309,7 @@ DBI      by Tim Bunce       dbi-users@isc.org
 
 ---------------------------------------------------------------------------
 
-   Edmund Mergl <E.Mergl@bawue.de>                       September 28, 1999
+   Edmund Mergl <E.Mergl@bawue.de>                       November 20, 1999
 
 
 ---------------------------------------------------------------------------
