@@ -1,6 +1,6 @@
 #-------------------------------------------------------
 #
-# $Id: README,v 1.2 1997/04/06 08:41:38 mergl Exp $
+# $Id: README,v 1.4 1997/05/11 20:25:40 mergl Exp $
 #
 #-------------------------------------------------------
 
@@ -8,59 +8,16 @@
 DESCRIPTION:
 ------------
 
-This is version 0.2 of Apache::DBI.pm.
+This is version 0.3 of Apache::AuthenDBI.pm and Apache::DBI.pm.
 
-This module is supposed to be used with the Apache daemon together with an 
-embedded perl interpreter like mod_perl. It provides authentication via Perl's 
-DBI initiating a persistent database connection. With the first database 
-access the connection to the database is established. It remains open for the 
-lifetime of the httpd and supersedes the time consuming connect and disconnect 
-with standard CGI for every database access. The persistent database connection
-can also be used without authentication. 
+These two modules are supposed to be used with the Apache daemon together with an 
+embedded perl interpreter like mod_perl. AuthenDBI.pm provides authentication via 
+Perl's DBI and DBI.pm provides a persistent database connection. 
 
-
-
-USAGE:
-------
-Add the following configuration line to httpd.conf or srm.conf: 
-
- PerlModule Apache::DBI
-
-For using authentication use the following entries in .htaccess: 
-
- AuthName DBI
- AuthType Basic
-
- PerlAuthenHandler Apache::DBI
-
- PerlSetVar AuthDBIDB     dbname
- PerlSetVar AuthDBIUser   username
- PerlSetVar AuthDBIAuth   auth
- PerlSetVar AuthDBIDriver driver
-
- PerlSetVar AuthDBIUserTable table
- PerlSetVar AuthDBINameField user
- PerlSetVar AuthDBIPasswordField password
-
- <Limit GET POST>
- require valid-user
- </Limit>
-
-You may also use 'require user xxx' but there is no support for 
-'require group xxx'.
-
-For using a persistent database connection you have to replace in your perl 
-scripts the command: 
-
-          use DBI;
-with
-          use Apache::DBI;
-
-Also replace every 
-
-         DBI->connect()
-with
-         Apache::DBI->connect()
+With the first database access the connection to the database is established. It 
+remains open for the lifetime of the httpd and supersedes the time consuming connect 
+and disconnect with standard CGI for every database access. For further information 
+and limitations read the module documentation. 
 
 
 
@@ -101,6 +58,6 @@ DBI      by Tim Bunce       <Tim.Bunce@ig.co.uk>
 
 ---------------------------------------------------------------------------
 
-   Edmund Mergl <E.Mergl@bawue.de>                       April 10, 1997
+   Edmund Mergl <E.Mergl@bawue.de>                       May 11, 1997
 
 ---------------------------------------------------------------------------

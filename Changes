@@ -9,3 +9,12 @@ Revision history for ApacheDBI.
         - method for disconnect added
 	- menu item for Apache::Status added
 
+0.3  May  5, 1997
+	- make AuthenDBI to be a separate module 
+	- adapt to new DBI, so code changes are not 
+	  required anymore for persistent connections
+
+04  May 13, 1997
+	- fixed check for first internal request in
+	  AuthenDBI.pm
+
