@@ -4,11 +4,11 @@ use Apache ();
 use DBI ();
 use strict;
 
-# $Id: DBI.pm,v 1.42 1999/08/24 11:53:26 mergl Exp $
+# $Id: DBI.pm,v 1.43 1999/09/27 19:43:52 mergl Exp $
 
 require_version DBI 1.00;
 
-$Apache::DBI::VERSION = '0.85';
+$Apache::DBI::VERSION = '0.86';
 
 # 1: report about new connect
 # 2: full debug output
@@ -97,7 +97,8 @@ sub connect {
     }
 
     # do we need to ping the database ?
-    $PingTimeOut{$dsn} = 0 unless defined($PingTimeOut{$dsn});
+    $PingTimeOut{$dsn}  = 0 unless defined($PingTimeOut{$dsn});
+    $LastPingTime{$dsn} = 0 unless defined($LastPingTime{$dsn});
     my $now = time;
     my $needping = ($PingTimeOut{$dsn} >= 0 and $now - $LastPingTime{$dsn} > $PingTimeOut{$dsn}) ? 1 : 0;
     print STDERR "$prefix need ping: ", $needping == 1 ? "yes" : "no", "\n" if $Apache::DBI::DEBUG > 1;
@@ -164,7 +165,7 @@ sub all_handlers {
 }
 
 
-# patch from Tim Bunce: Apache::DBI will not return a DBD::Oracle ref cursor
+# patch from Tim Bunce: Apache::DBI will not return a DBD ref cursor
 
 @Apache::DBI::st::ISA = ('DBI::st');
 

@@ -1,6 +1,20 @@
 Revision history for ApacheDBI.
 
-0.85  September 24, 1999
+0.86 September 27, 1999
+	- in AuthDBI remove check of configured data_source in order to allow 
+	  the usage of the environment variable DBI_DSN. Bug spotted by 
+	  Oleg Bartunov <oleg@sai.msu.su>.
+	- applied patch from Matt Loschert <loschert@servint.com>,
+	  which avoids 'Use of uninitialized value ...' in Apache::DBI.
+	- added new attribute 'Auth_DBI_encryption_salt' as proposed by
+	  Nathan Clemons <nathan@windsofstorm.net>.
+	  Per default this is set to 'password' which will use the password 
+	  as salt for the crypt function. Setting this to 'userid' will use 
+	  the userid as salt.
+	- fixed bug with setting Auth_DBI_nopasswd to 'on', spotted by 
+	  "Sigurjon Olafsson" <sigurjon@gm.is>.
+
+0.85 August 24, 1999
 	- change separator of Auth_DBI_data_source, Auth_DBI_username and 
 	  Auth_DBI_password from comma to tilde, in order to avoid clashes 
 	  with embedded attributes in data_source. 

@@ -1,6 +1,6 @@
 #-------------------------------------------------------
 #
-# $Id: README,v 1.37 1999/08/24 13:01:47 mergl Exp $
+# $Id: README,v 1.39 1999/09/27 19:46:59 mergl Exp $
 #
 #-------------------------------------------------------
 
@@ -8,14 +8,23 @@
 DESCRIPTION:
 ------------
 
-This is version 0.85 of Apache::AuthDBI.pm and Apache::DBI.pm.
+This is version 0.86 of Apache::AuthDBI.pm and Apache::DBI.pm.
 
 These modules are supposed to be used with the Apache server together with 
 an embedded perl interpreter like mod_perl. They provide support for basic 
-authentication via Perl's Database Independent Interface (DBI). 
+authentication and authorization as well as support for persistent database 
+connections via Perl's Database Independent Interface (DBI). 
 
-o AuthDBI.pm provides authentication and authorization
-o DBI.pm provides persistent database connections
+o AuthDBI.pm provides authentication and authorization: 
+
+  - optional shared cache for passwords to minimize database load 
+  - configurable cleanup-handler deletes outdated entries from the cache 
+
+o DBI.pm provides persistent database connections: 
+
+  - connections can be established during server-startup 
+  - configurable rollback to ensure data integrity 
+  - configurable verification of the connections to avoid time-outs. 
 
 The modules have been developed on RH 6.0 with apache_1.3.6 and mod_perl-1.21.
 
@@ -23,12 +32,18 @@ The modules have been developed on RH 6.0 with apache_1.3.6 and mod_perl-1.21.
 RECENT CHANGES:
 ---------------
 
-- change separator of Auth_DBI_data_source, Auth_DBI_username and 
-  Auth_DBI_password from comma to tilde, in order to avoid clashes 
-  with embedded attributes in data_source. 
-  Bug spotted by Oleg Bartunov <oleg@sai.msu.su>.
-- applied patch to Apache::DBI.pm from Tim Bunce <Tim.Bunce@ig.co.uk>
-  which solves the problem that Apache::DBI did not return a ref cursor.
+ - in AuthDBI remove check of configured data_source in order to allow
+   the usage of the environment variable DBI_DSN. Bug spotted by
+   Oleg Bartunov <oleg@sai.msu.su>.
+ - applied patch from Matt Loschert <loschert@servint.com>,
+   which avoids 'Use of uninitialized value ...' in Apache::DBI.
+ - added new attribute 'Auth_DBI_encryption_salt' as proposed by
+   Nathan Clemons <nathan@windsofstorm.net>.
+   Per default this is set to 'password' which will use the password
+   as salt for the crypt function. Setting this to 'userid' will use
+   the userid as salt.
+ - fixed bug with setting Auth_DBI_nopasswd to 'on', spotted by
+   "Sigurjon Olafsson" <sigurjon@gm.is>.
 
 
 EXAMPLES:
@@ -171,10 +186,9 @@ In this case, during the database connect, control flow goes through the
 Apache::DBI module which stores the new database handle in a global hash and 
 which overloads the disconnect method with a do-nothing. 
 
-With the above configuration every httpd process initiates a database 
-connection upon the first connect request. Sometimes it is more convenient 
-to initiate all needed database handles upon process startup. This can be 
-done with the method: 
+With the above configuration every server initiates a database connection upon 
+the first connect request. Sometimes it is more convenient to initiate all 
+needed database handles upon process startup. This can be done with the method: 
 
  Apache::DBI->connect_on_init($data_source, $username, $auth, \%attr)
 
@@ -192,15 +206,17 @@ the database handle will also be initiated.
 WARNING: Do not attempt to open a persistent database connection in the parent 
 process (via PerlRequire or PerlModule). If you do, children will get a copy 
 of this handle, causing clashes when the handle is used by two processes at 
-the same time. Each child must have it's own unique connection handle. 
+the same time. Each child must have it's own unique connection handle. For 
+the same reason it is not possible, to share one database handle between all 
+servers using some IPC mechanism. 
 
 If you want to make sure that the module works correctly, turn on debugging 
 as described below and search for 'Apache::DBI' in the output. You should 
-get one 'new connect' message for every httpd process. Any subsequent request 
+get one 'new connect' message for every server process. Any subsequent request 
 should result in a 'already connected' message. Please keep in mind, that 
-httpd processes may be killed as well as newly created depending upon your 
-configuration and depending upon your load. Every new process needs to do his 
-own initial database connect. 
+server processes may be killed as well as newly created depending upon your 
+configuration and depending upon your load. Every new server process needs to 
+do its own initial database connect. 
 
 Another useful method for enhancing the performance is to enable the caching in 
 AuthDBI setting Auth_DBI_cache_time > 0 and to use shared memory for the cache 
@@ -302,7 +318,7 @@ DBI      by Tim Bunce       dbi-users@isc.org
 
 ---------------------------------------------------------------------------
 
-   Edmund Mergl <E.Mergl@bawue.de>                       September 24, 1999
+   Edmund Mergl <E.Mergl@bawue.de>                       September 27, 1999
 
 
 ---------------------------------------------------------------------------

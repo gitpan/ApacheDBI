@@ -6,11 +6,11 @@ use DBI ();
 use IPC::SysV qw( IPC_CREAT IPC_RMID S_IRUSR S_IWUSR );
 use strict;
 
-# $Id: AuthDBI.pm,v 1.3 1999/08/24 13:01:47 mergl Exp $
+# $Id: AuthDBI.pm,v 1.4 1999/09/27 19:43:52 mergl Exp $
 
 require_version DBI 1.00;
 
-$Apache::AuthDBI::VERSION = '0.85';
+$Apache::AuthDBI::VERSION = '0.86';
 
 # 1: report about cache miss
 # 2: full debug output
@@ -35,6 +35,7 @@ my %Config = (
     'Auth_DBI_authoritative'    => 'on',
     'Auth_DBI_nopasswd'         => 'off',
     'Auth_DBI_encrypted'        => 'on',
+    'Auth_DBI_encryption_salt'  => 'password',
     'Auth_DBI_uidcasesensitive' => 'on',
     'Auth_DBI_pwdcasesensitive' => 'on',
     'Auth_DBI_placeholder'      => 'off',
@@ -191,6 +192,7 @@ sub authen {
     my @data_sources = split(/~/, $Attr->{data_source});
     my @usernames    = split(/~/, $Attr->{username});
     my @passwords    = split(/~/, $Attr->{password});
+    @data_sources = '' unless defined(@data_sources); # use ENV{DBI_DSN}
 
     # obtain the id for the cache
     my $data_src = $Attr->{data_source};
@@ -209,6 +211,7 @@ sub authen {
 
     # check whether the user is cached but consider that the password possibly has changed
     my $passwd = '';
+    my $salt   = '';
     if ($CacheTime) { # do we use the cache ?
         if ($SHMID) { # do we keep the cache in shared memory ?
             semop($SEMID, $obtain_lock) or print STDERR "$prefix semop failed \n";
@@ -223,7 +226,8 @@ sub authen {
             $passwd_cached = $2;
             $groups_cached = $3;
             printf STDERR "$prefix cache: found >$ID< >$last_access< >$passwd_cached< \n" if $Apache::AuthDBI::DEBUG > 1;
-            my $passwd_to_check = $Attr->{encrypted} eq 'on' ? crypt($passwd_sent, $passwd_cached) : $passwd_sent; 
+            $salt = $Attr->{encryption_salt} eq 'userid' ? $user_sent : $passwd_cached;
+            my $passwd_to_check = $Attr->{encrypted} eq 'on' ? crypt($passwd_sent, $salt) : $passwd_sent; 
             # match cached password with password sent 
             $passwd = $passwd_cached if $passwd_to_check eq $passwd_cached;
         }
@@ -234,12 +238,6 @@ sub authen {
     } else { # password not cached or changed
         printf STDERR "$prefix passwd not found in cache \n" if $Apache::AuthDBI::DEBUG;
 
-        # sanity check
-        unless ($Attr->{data_source}) {
-            $r->log_reason("$prefix missing source parameter for database connect", $r->uri);
-            return SERVER_ERROR;
-        }
-
         # connect to database, use all data_sources until the connect succeeds
         my ($j, $connect);
         for ($j = 0; $j <= $#data_sources; $j++) {
@@ -249,7 +247,7 @@ sub authen {
             }
         }
         unless ($connect) {
-            $r->log_reason("$prefix db connect error with $Attr->{data_source}", $r->uri);
+            $r->log_reason("$prefix db connect error with data_source >$Attr->{data_source}<", $r->uri);
             return SERVER_ERROR;
         }
 
@@ -286,9 +284,16 @@ sub authen {
             # consider the case with many users sharing the same userid
 	    $passwd .= "$_$;";
         }
-        chop $passwd if $passwd;
 
+        chop  $passwd if $passwd;
+        undef $passwd if 0 == $sth->rows; # so we can distinguish later on between no password and empty password
+
+        if ($sth->err) {
+            $dbh->disconnect;
+            return SERVER_ERROR;
+        }
         $sth->finish;
+
         # re-use dbh for logging option below
         $dbh->disconnect unless ($Attr->{log_field} && $Attr->{log_string});
     }
@@ -297,7 +302,7 @@ sub authen {
     print STDERR "$prefix passwd = >$passwd<\n" if $Apache::AuthDBI::DEBUG > 1;
 
     # check if password is needed
-    if (!$passwd) {
+    if (!defined($passwd)) { # not found in database
         # if authoritative insist that user is in database
         if ($Attr->{authoritative} eq 'on') {
             $r->log_reason("$prefix password for user $user_sent not found", $r->uri);
@@ -309,7 +314,7 @@ sub authen {
         }
     }
 
-    # allow no password
+    # allow any password if nopasswd = on and the retrieved password is empty
     if ($Attr->{nopasswd} eq 'on' && !$passwd) {
         return OK;
     }
@@ -326,6 +331,7 @@ sub authen {
     my $password;
     foreach $password (split(/$;/, $passwd)) {
         # compare the two passwords possibly crypting the password if needed
+        $salt = $Attr->{encryption_salt} eq 'userid' ? $user_sent : $password;
         my $passwd_to_check = $Attr->{encrypted} eq 'on' ? crypt($passwd_sent, $password) : $passwd_sent; 
         if ($passwd_to_check eq $password) {
             $found = 1;
@@ -432,6 +438,7 @@ sub authz {
     my @data_sources = split(/~/, $Attr->{data_source});
     my @usernames    = split(/~/, $Attr->{username});
     my @passwords    = split(/~/, $Attr->{password});
+    @data_sources = '' unless defined(@data_sources); # use ENV{DBI_DSN}
 
     # if not configured decline
     unless ($Attr->{pwd_table} && $Attr->{uid_field} && $Attr->{grp_field}) {
@@ -527,12 +534,6 @@ sub authz {
             printf STDERR "$prefix groups found in cache \n" if $Apache::AuthDBI::DEBUG > 1;
         } else { # groups not cached or changed
             printf STDERR "$prefix groups not found in cache \n" if $Apache::AuthDBI::DEBUG;
-
-            # sanity check
-            unless ($Attr->{data_source}) {
-                $r->log_reason("missing source parameter for database connect", $r->uri);
-                return SERVER_ERROR;
-            }
 
             # connect to database, use all data_sources until the connect succeeds
             my ($j, $connect);
@@ -806,8 +807,8 @@ If the username does not exist and the authoritative directive is set to 'on',
 the request is rejected. If the authoritative directive is set to 'off', the 
 control is passed on to next module in line. 
 
-If the password for the given username is empty and the nopasswd directive 
-is set to 'off', the request is rejected. If the nopasswd directive is set 
+If the password from the database for the given username is empty and the nopasswd 
+directive is set to 'off', the request is rejected. If the nopasswd directive is set 
 to 'on', any password is accepted. 
 
 Finally the passwords (multiple passwords per userid are allowed) are 
@@ -903,7 +904,8 @@ passed to the database driver for processing during connect. The data_source
 parameter (as well as the username and the password parameters) may be a 
 tilde ('~') separated list of several data_sources. All of these triples will 
 be used until a successful connect is made. This way several backup-servers can 
-be configured. 
+be configured. if you want to use the environment variable DBI_DSN instead of 
+a data_source, do not specify this parameter at all. 
 
 =item *
 Auth_DBI_username (Authentication and Authorization)
@@ -978,18 +980,25 @@ sure you know what you are doing when you decide to switch it off.
 Auth_DBI_nopasswd  < on / off > (Authentication only)
 
 Default is 'off'. When set 'on' the password comparison is skipped if the 
-Auth_DBI_pwd_field is empty, i.e. allow any password. This is 'off' by default 
-to ensure that an empty Auth_DBI_pwd_field does not allow people to log in 
-with a random password. Be sure you know what you are doing when you decide to 
-switch it on. 
+password retrieved from the database is empty, i.e. allow any password. This is 
+'off' by default to ensure that an empty Auth_DBI_pwd_field does not allow people 
+to log in with a random password. Be sure you know what you are doing when you 
+decide to switch it on. 
 
 =item *
 Auth_DBI_encrypted  < on / off > (Authentication only)
 
-Default is 'on'. When set 'on', the value in the Auth_DBI_pwd_field is assumed 
-to be crypted using perl's crypt() function and the incoming password is 
-crypted before comparison. When this directive is set to 'off', the comparison 
-is done directly with the plain-text entered password. 
+Default is 'on'. When set to 'on', the password retrieved from the database 
+is assumed to be crypted. Hence the incoming password will be crypted before 
+comparison. When this directive is set to 'off', the comparison is done directly 
+with the plain-text entered password. 
+
+=item *
+Auth_DBI_encryption_salt < password / userid > (Authentication only)
+
+When crypting the given password AuthDBI uses per default the password selected 
+from the database as salt. Setting this parameter to 'userid', the module uses 
+the userid as salt. 
 
 =item *
 Auth_DBI_uidcasesensitive  < on / off > (Authentication and Authorization)
@@ -1004,7 +1013,6 @@ Default is 'on'. When set 'off', the entered password is converted to lower
 case. 
 
 =item *
-
 Auth_DBI_placeholder < on / off > (Authentication and Authorization)
 
 Default is 'off'.  When set 'on', the select statement is prepared using a 
