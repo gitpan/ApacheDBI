@@ -6,11 +6,11 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthzDBI.pm,v 1.2 1997/11/02 18:25:59 mergl Exp $
+#$Id: AuthzDBI.pm,v 1.4 1997/12/18 20:57:45 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::AuthzDBI::VERSION = '0.75';
+$Apache::AuthzDBI::VERSION = '0.76';
 
 $Apache::AuthzDBI::DEBUG = 0;
 
@@ -81,7 +81,6 @@ sub handler {
     if ($attr->{casesensitive} eq "off")
     {
        $user_sent   = lc($user_sent);
-       $passwd_sent = lc($passwd_sent);
     }
 
     # iterate over all requirement directives
@@ -152,6 +151,9 @@ sub handler {
 
                 # fetch result
                 $group = $sth->fetchrow_array;
+
+                # strip trailing blanks for fixed-length datatype
+                $group =~ s/ +$//;
                 print STDERR "$prefix group = >$group<\n" if $Apache::AuthzDBI::DEBUG;
 
                 $sth->finish;

@@ -3,11 +3,11 @@ package Apache::DBI;
 use DBI ();
 use strict;
 
-#$Id: DBI.pm,v 1.16 1997/11/02 18:25:59 mergl Exp $
+#$Id: DBI.pm,v 1.17 1997/12/18 20:24:59 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::DBI::VERSION = '0.75';
+$Apache::DBI::VERSION = '0.76';
 
 $Apache::DBI::DEBUG = 0;
 

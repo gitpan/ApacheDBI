@@ -1,5 +1,8 @@
 Revision history for ApacheDBI.
 
+0.76 December 18, 1997
+	- removed unused variable from AuthzDBI.pm
+
 0.75 November 02, 1997
 	- strip trailing blanks from password for 
 	  fixed-length datatype

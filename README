@@ -1,6 +1,6 @@
 #-------------------------------------------------------
 #
-# $Id: README,v 1.13 1997/11/02 18:25:59 mergl Exp $
+# $Id: README,v 1.14 1997/12/18 20:24:59 mergl Exp $
 #
 #-------------------------------------------------------
 
@@ -8,7 +8,7 @@
 DESCRIPTION:
 ------------
 
-This is version 0.75 of Apache::AuthenDBI.pm, Apache::AuthzDBI.pm and 
+This is version 0.76 of Apache::AuthenDBI.pm, Apache::AuthzDBI.pm and 
 Apache::DBI.pm.
 
 These three modules are supposed to be used with the Apache daemon together 
@@ -240,7 +240,7 @@ DBI      by Tim Bunce       dbi-users@fugue.com
 
 ---------------------------------------------------------------------------
 
-   Edmund Mergl <E.Mergl@bawue.de>                     November 02, 1997
+   Edmund Mergl <E.Mergl@bawue.de>                     December 18, 1997
 
 
 ---------------------------------------------------------------------------
