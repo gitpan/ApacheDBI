@@ -1,52 +1,16 @@
 Revision history for ApacheDBI.
 
-0.74 August 15, 1997
-        - new module: AuthzDBI for Authorization,
-          (supports group authorization)
-        - complete rewrite of AuthenDBI.
-        - configuration directives and functionality 
-          of both modules are supposed to be identical
-          with mod_auth_msql of the apache daemon.
-	- adapted to new DBI connect syntax
-	- changed names of config vars to be more
-          consistent with other authentication modules.
-          PLEASE ADAPT YOUR CONFIGURATION !!!
+0.1   Mar 15, 1997
+	- creation
 
-0.73 July 15, 1997
-	- fixed bug in DBI.pm: check return value of connect
-
-0.72 July 13, 1997
-	- added logging option to AuthenDBI
-
-0.71 July 01, 1997
-	- debugging is now controlled by a global variable
-
-0.7  July 01, 1997
-	- changed the way of initiating debug output
-
-0.6  May 20, 1997
-	- fixed bug which caused a disconnect with some 
-          DBD-drivers (Oracle,...)
-
-0.5  May 16, 1997
-	- applied patches from Stephen E Kane <skane@cse.psu.edu>
-
-0.4  May 13, 1997
-	- fixed check for first internal request in
-	  AuthenDBI.pm
-
-0.3  May  5, 1997
-	- make AuthenDBI to be a separate module 
-	- adapt to new DBI, so code changes are not 
-	  required anymore for persistent connections
-
-0.2  Apr  6, 1997
+0.2   Apr  6, 1997
 	- unused methods deleted
 	- AuthenDBI integrated
         - method for disconnect added
 	- menu item for Apache::Status added
 
-0.1   Mar 15, 1997
-	- creation
-
+0.3  May  5, 1997
+	- make AuthenDBI to be a separate module 
+	- adapt to new DBI, so code changes are not 
+	  required anymore for persistent connections
 
