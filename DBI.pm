@@ -3,16 +3,33 @@ package Apache::DBI;
 use DBI ();
 use strict;
 
-#$Id: DBI.pm,v 1.17 1997/12/18 20:24:59 mergl Exp $
+#$Id: DBI.pm,v 1.18 1998/01/18 21:11:19 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::DBI::VERSION = '0.76';
+$Apache::DBI::VERSION = '0.77';
 
 $Apache::DBI::DEBUG = 0;
 
 
 my %Connected;
+my @ChildConnect;
+
+
+# supposed to be called in a startup file
+sub connect_on_init { push @ChildConnect, [@_] }
+
+# when forking a new child the handler establishes all configured connections
+if(Apache->can('push_handlers')) {
+    Apache->push_handlers(PerlChildInitHandler => sub {
+       print STDERR "$$ Apache::DBI push_handlers(PerlChildInitHandler) \n" if $Apache::DBI::DEBUG;
+       for my $aref (@ChildConnect) {
+           shift @$aref;
+           DBI->connect(@$aref);
+       }
+    });
+}
+
 
 sub connect {
 
@@ -108,8 +125,12 @@ The Apache::DBI module still has a limitation: it keeps database connections
 persistent on a per process basis. The problem is, if a user accesses several 
 times a database, the http requests will be handled very likely by different 
 httpd children. Every child process needs to do its own connect. It would be 
-nice, if all httpd children could share the database handles. One possible 
-solution might be a threaded Apache version. 
+nice, if all httpd children could share the database handles. Currently this 
+is not possible, because of the distinct name-space of every process. Also 
+it is not possible to initiate one database handle upon startup of the httpd 
+and then inheriting this handle to every subsequent child. Whenever one of 
+the children dies, this common handle becomes invalid. One possible solution 
+might be a threaded Apache version. 
 
 With this limitation in mind, there are scenarios, where the usage of 
 Apache::DBI.pm is depreciated. Think about a heavy loaded Web-site where every 
@@ -140,6 +161,17 @@ Add the following line to your httpd.conf or srm.conf:
  PerlModule Apache::DBI
 
 It is important, to load this module before any other Apache module ! 
+
+The module provides the additional method:
+
+ Apache::DBI->connect_on_init($data_source, $username, $auth, \%attr)
+
+This can be used as a simple way to have apache children establish connections 
+on server startup. This call should be in a startup file (PerlModule, <Perl> 
+or PerlRequire). It will establish a connection when a child is started in 
+that child process. Note that this needs mod_perl-1.07_02 or higher, 
+apache_1.3b3 or higher and that mod_perl needs to be configured with 
+PERL_CHILD_INIT=1 and PERL_STACKED_HANDLERS=1.
 
 
 =head1 SEE ALSO

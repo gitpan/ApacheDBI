@@ -1,6 +1,6 @@
 #-------------------------------------------------------
 #
-# $Id: README,v 1.14 1997/12/18 20:24:59 mergl Exp $
+# $Id: README,v 1.15 1998/01/18 21:11:20 mergl Exp $
 #
 #-------------------------------------------------------
 
@@ -8,16 +8,17 @@
 DESCRIPTION:
 ------------
 
-This is version 0.76 of Apache::AuthenDBI.pm, Apache::AuthzDBI.pm and 
-Apache::DBI.pm.
+This is version 0.77 of Apache::AuthenDBI.pm, Apache::AuthzDBI.pm, 
+Apache::DBI.pm and DebugDBI.pm.
 
-These three modules are supposed to be used with the Apache daemon together 
+These four modules are supposed to be used with the Apache daemon together 
 with an embedded perl interpreter like mod_perl. They provide support for 
 basic authentication via Perl's Database Independent Interface (DBI).
 
 o AuthenDBI.pm provides authentication,
 o AuthzDBI.pm  provides authorization,
 o DBI.pm provides persistent database connections. 
+o DebugDBI.pm enables debugging.
 
 
 EXAMPLE:
@@ -25,6 +26,7 @@ EXAMPLE:
 
 Here we explain only some simple examples. For further information and 
 limitations please read the module documentation. 
+
 
 1. user authentication
 
@@ -68,6 +70,7 @@ specified URL.
 Please do not confuse this user authentication with the username/password 
 needed for the database connect. These two authentications are completely 
 independent !
+
 
 2. group authorization
 
@@ -161,6 +164,25 @@ loaded before (that's the reason the Apache::DBI module has to come first).
 In this case, during the database connect, control flow goes through the 
 Apache::DBI module which stores the new database handle in a global hash and 
 which overloads the disconnect method with a NOP. 
+
+With the above configuration every httpd process initiates a database 
+connection upon the first connect request. Sometimes it is more convenient 
+to initiate all needed database handles upon process startup. This can be 
+done with the method: 
+
+ Apache::DBI->connect_on_init($data_source, $username, $auth, \%attr)
+
+This method is supposed to be called in a startup file, in which also all 
+needed modules can be loaded. As an example the file startup.pl is provided. 
+Add all other modules you need to this file and just add one line to your 
+httpd.conf:
+
+ PerlRequire /usr/local/apache/perl/startup.pl
+
+This way all modules are pulled into the main httpd process. When the 
+main process forks his children, the code of all modules is already in 
+place and the database handle will also be initiated. For further 
+information read the mod_perl_tuning guide of Vivek Khera. 
 
 If you want to make sure that the module works correctly, turn on debugging 
 as described below and search for 'Apache::DBI' in the output. You should 

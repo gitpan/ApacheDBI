@@ -6,11 +6,11 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthzDBI.pm,v 1.4 1997/12/18 20:57:45 mergl Exp $
+#$Id: AuthzDBI.pm,v 1.5 1998/01/18 21:11:19 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::AuthzDBI::VERSION = '0.76';
+$Apache::AuthzDBI::VERSION = '0.77';
 
 $Apache::AuthzDBI::DEBUG = 0;
 
@@ -161,6 +161,7 @@ sub handler {
                 # check group
                 if ( $require[$i] eq $group ) {
                     $group_result = OK;
+                    $r->subprocess_env(REMOTE_GROUP => $group);
                     print STDERR "$prefix group_result = OK: $require[$i] = $group\n" if $Apache::AuthzDBI::DEBUG;
                     last;
                 }
@@ -266,6 +267,10 @@ group. If there is no match and the authoritative directive is set to 'on' the
 request is rejected. 
 
 In case of 'valid-user' the request is accepted. 
+
+In case the authorization succeeds, the environment variable REMOTE_GROUP is 
+set to the group name, so scripts that are protected by AuthzDBI don't need to 
+bang on the database server again to get the group name.
 
 
 =head1 LIST OF TOKENS

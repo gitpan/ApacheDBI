@@ -1,5 +1,10 @@
 Revision history for ApacheDBI.
 
+0.77 January 18, 1998
+        - applied patches from Doug MacEachern:
+          o new method  Apache::DBI->connect_on_init()
+          o set environment variable REMOTE_GROUP in AuthzDBI.pm.
+
 0.76 December 18, 1997
 	- removed unused variable from AuthzDBI.pm
 
