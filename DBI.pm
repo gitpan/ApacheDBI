@@ -3,11 +3,11 @@ package Apache::DBI;
 use DBI ();
 use strict;
 
-#$Id: DBI.pm,v 1.13 1997/07/12 21:41:22 mergl Exp $
+#$Id: DBI.pm,v 1.14 1997/07/15 20:38:07 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::DBI::VERSION = '0.72';
+$Apache::DBI::VERSION = '0.73';
 
 $Apache::DBI::DEBUG = 0;
 
@@ -27,7 +27,9 @@ sub connect {
         return (bless $Connected{$idx}, 'Apache::DBI::db') if ($Connected{$idx} && $Connected{$idx}->ping);
     }
 
+    $Connected{$idx} = undef;
     $Connected{$idx} = $drh->connect(@args);
+    return undef if ! $Connected{$idx};
     $Connected{$idx}->{InactiveDestroy} = 1;
     print STDERR "Pid = $$, Apache::DBI::connect new connect to '$idx'\n" if $Apache::DBI::DEBUG;
     return (bless $Connected{$idx}, 'Apache::DBI::db');

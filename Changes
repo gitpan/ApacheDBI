@@ -1,5 +1,8 @@
 Revision history for ApacheDBI.
 
+0.73 July 15, 1997
+	- fixed bug in DBI.pm: check return value of connect
+
 0.72 July 13, 1997
 	- added logging option to AuthenDBI
 

@@ -6,11 +6,11 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthenDBI.pm,v 1.12 1997/07/12 21:41:22 mergl Exp $
+#$Id: AuthenDBI.pm,v 1.13 1997/07/15 20:38:06 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::AuthenDBI::VERSION = '0.72';
+$Apache::AuthenDBI::VERSION = '0.73';
 
 $Apache::AuthenDBI::DEBUG = 0;
 
