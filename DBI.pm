@@ -3,11 +3,11 @@ package Apache::DBI;
 use DBI ();
 use strict;
 
-#$Id: DBI.pm,v 1.6 1997/05/16 20:37:57 mergl Exp $
+#$Id: DBI.pm,v 1.8 1997/05/20 20:09:37 mergl Exp $
 
 require_version DBI 0.81;
 
-my $VERSION = '0.5';
+my $VERSION = '0.6';
 
 my $DEBUG = $ENV{APACHE_DBI_DEBUG} || 0;
 
@@ -17,16 +17,24 @@ sub connect {
 
     my $class = shift;
     unshift @_, $class if ref $class;
-    my $drh = shift;
-    my @args= @_;
+    my $drh  = shift;
+    my @args = map { defined $_ ? $_ : "" } @_;
+    my $idx  = join (":", (@args));
 
-    my $idx = join (":", (@args));
-    return $Connected{$idx} if ($Connected{$idx} && $Connected{$idx}->ping);
+    return (bless $Connected{$idx}, 'Apache::DBI::db') if ($Connected{$idx} && $Connected{$idx}->ping);
 
     print STDERR "Pid = $$, Apache::DBI::connect to '$idx'\n" if $DEBUG;
     $Connected{$idx} = $drh->connect(@args);
     $Connected{$idx}->{InactiveDestroy} = 1;
-    return $Connected{$idx};
+    return (bless $Connected{$idx}, 'Apache::DBI::db');
+}
+
+
+{ package Apache::DBI::db;
+  no strict;
+  @ISA=qw(DBI::db);
+  use strict;
+  sub disconnect {1};
 }
 
 
