@@ -1,10 +1,9 @@
-AuthenDBI.pm
-AuthzDBI.pm
+AuthDBI.pm
 Changes
 DBI.pm
-DebugDBI.pm
 MANIFEST
 Makefile.PL
 README
 eg/startup.pl
 test.pl
+traces.txt

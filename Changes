@@ -1,10 +1,37 @@
 Revision history for ApacheDBI.
 
+
+0.84  August 21, 1999
+	- combine Apache::AuthenDBI and Apache::AuthzDBI into one package 
+	  Apache::AuthDBI.
+	- discard Apache::DebugDBI. Debugging can be enabled by setting 
+	  the variables Apache::AuthDBI::DEBUG and Apache::DBI::DEBUG to 
+	  appropriate values.
+	- the attribute 'Auth_DBI_cache_time' has been discarded. The
+	  cache time now has to be configured upon server startup using the
+	  method setCacheTime(n).
+	- optionally use shared memory for the cache used for authentication
+	  and authorization as proposed by Rauznitz Balazs <jomagam@yahoo.com>. 
+	- make the PerlCleanupHandler, which cleans the cache in Apache::AuthDBI, 
+	  configurable. Per default it is switched off. 
+	- connect attributes for authentication and authorization may be a 
+	  list of several servers, all of which will be used until the first 
+	  connect succeeds.
+	  Proposed by Matt Loschert <loschert@servint.com>.
+	- the PerlCleanupHandler in Apache::DBI.pm, which is supposed 
+	  to initiate a rollback in case AutoCommit is off, will only be 
+	  created, if the initial data_source sets AutoCommit to 0.
+	- fixed bug with empty password, which didn't fall through for
+	  authoritative = off, spotted by "Graham Johnson" <graham@iii.co.uk>.
+	- analogous to the environment variables REMOTE_GROUPS and REMOTE_GROUP 
+	  the selected passwords and the matched password are put into the 
+	  environment variables REMOTE_PASSWORDS and REMOTE_PASSWORD. 
+	  Proposed by Jochen Wiedmann <joe@ispsoft.de>.
+	- add traces.txt, which serves as reference for the debug output. 
+
 0.83  August 08, 1999
 	- make ping configurable, proposed by 
 	  Gunther Birznieks <gunther@nhgri.nih.gov>
-	- the environment variable REMOTE_GROUPS uses as separator $; 
-	  instead of comma.
 	- change $user_sent_quoted to $user_sent when checking for 
 	  placeholders (Michael Smith <mjs@iii.co.uk>)
 	- bug-fix for encrypted passwords, which have never been taken
