@@ -1,5 +1,12 @@
 Revision history for ApacheDBI.
 
+0.85  September 24, 1999
+	- change separator of Auth_DBI_data_source, Auth_DBI_username and 
+	  Auth_DBI_password from comma to tilde, in order to avoid clashes 
+	  with embedded attributes in data_source. 
+	  Bug spotted by Oleg Bartunov <oleg@sai.msu.su>.
+	- applied patch to Apache::DBI.pm from Tim Bunce <Tim.Bunce@ig.co.uk>
+	  which solves the problem that Apache::DBI did not return a ref cursor.
 
 0.84  August 21, 1999
 	- combine Apache::AuthenDBI and Apache::AuthzDBI into one package 

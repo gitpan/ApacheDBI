@@ -6,11 +6,11 @@ use DBI ();
 use IPC::SysV qw( IPC_CREAT IPC_RMID S_IRUSR S_IWUSR );
 use strict;
 
-# $Id: AuthDBI.pm,v 1.1 1999/08/21 10:36:39 mergl Exp $
+# $Id: AuthDBI.pm,v 1.3 1999/08/24 13:01:47 mergl Exp $
 
 require_version DBI 1.00;
 
-$Apache::AuthDBI::VERSION = '0.84';
+$Apache::AuthDBI::VERSION = '0.85';
 
 # 1: report about cache miss
 # 2: full debug output
@@ -187,13 +187,15 @@ sub authen {
         printf STDERR "$prefix Config{ %-16s } = %s\n", $key, $val if $Apache::AuthDBI::DEBUG > 1;
     }
 
-    # parse connect attributes, which may be comma separated lists
-    my @data_sources = split(/,/, $Attr->{data_source});
-    my @usernames    = split(/,/, $Attr->{username});
-    my @passwords    = split(/,/, $Attr->{password});
+    # parse connect attributes, which may be tilde separated lists
+    my @data_sources = split(/~/, $Attr->{data_source});
+    my @usernames    = split(/~/, $Attr->{username});
+    my @passwords    = split(/~/, $Attr->{password});
 
     # obtain the id for the cache
-    $ID = join ',', $user_sent, $Attr->{data_source}, $Attr->{pwd_table}, $Attr->{uid_field};
+    my $data_src = $Attr->{data_source};
+    $data_src =~ s/\(.+\)//go; # remove any embedded attributes, because of trouble with regexps
+    $ID = join ',', $user_sent, $data_src, $Attr->{pwd_table}, $Attr->{uid_field};
 
     # if not configured decline
     unless ($Attr->{pwd_table} && $Attr->{uid_field} && $Attr->{pwd_field}) {
@@ -340,6 +342,7 @@ sub authen {
                 my $now = time;
                 if (!($Cache =~ s/$ID$;\d+$;.*$;(.*)\n/$ID$;$now$;$password$;$1\n/)) {
 		    $Cache .= "$ID$;$now$;$password$;\n";
+                } else {
                 }
                 if ($SHMID) { # write cache to shared memory
                     shmwrite($SHMID, $Cache, 0, $SHMSIZE)  or printf STDERR "$prefix shmwrite failed \n";
@@ -425,10 +428,10 @@ sub authz {
 
     # here we could read the configuration, but we re-use the configuration from the authentication
 
-    # parse connect attributes, which may be comma separated lists
-    my @data_sources = split(/,/, $Attr->{data_source});
-    my @usernames    = split(/,/, $Attr->{username});
-    my @passwords    = split(/,/, $Attr->{password});
+    # parse connect attributes, which may be tilde separated lists
+    my @data_sources = split(/~/, $Attr->{data_source});
+    my @usernames    = split(/~/, $Attr->{username});
+    my @passwords    = split(/~/, $Attr->{password});
 
     # if not configured decline
     unless ($Attr->{pwd_table} && $Attr->{uid_field} && $Attr->{grp_field}) {
@@ -898,22 +901,22 @@ Auth_DBI_data_source (Authentication and Authorization)
 The data_source value has the syntax 'dbi:driver:dsn'. This parameter is 
 passed to the database driver for processing during connect. The data_source 
 parameter (as well as the username and the password parameters) may be a 
-comma separated list of several data_sources. All of these triples will be 
-used until a successful connect is made. This way several backup-servers can 
+tilde ('~') separated list of several data_sources. All of these triples will 
+be used until a successful connect is made. This way several backup-servers can 
 be configured. 
 
 =item *
 Auth_DBI_username (Authentication and Authorization)
 
 The username argument is passed to the database driver for processing during 
-connect. This parameter may be comma separated list. See the data_source 
+connect. This parameter may be a tilde ('~') separated list. See the data_source 
 parameter above for the usage of a list. 
 
 =item *
 Auth_DBI_password (Authentication and Authorization)
 
 The password argument is passed to the database driver for processing during 
-connect. This parameter may be comma separated list. See the data_source 
+connect. This parameter may be a tilde ('~')  separated list. See the data_source 
 parameter above for the usage of a list. 
 
 =item *

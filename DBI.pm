@@ -4,11 +4,11 @@ use Apache ();
 use DBI ();
 use strict;
 
-# $Id: DBI.pm,v 1.41 1999/08/21 08:44:47 mergl Exp $
+# $Id: DBI.pm,v 1.42 1999/08/24 11:53:26 mergl Exp $
 
 require_version DBI 1.00;
 
-$Apache::DBI::VERSION = '0.84';
+$Apache::DBI::VERSION = '0.85';
 
 # 1: report about new connect
 # 2: full debug output
@@ -162,6 +162,11 @@ sub cleanup {
 sub all_handlers {
   return \%Connected;
 }
+
+
+# patch from Tim Bunce: Apache::DBI will not return a DBD::Oracle ref cursor
+
+@Apache::DBI::st::ISA = ('DBI::st');
 
 
 # overload disconnect
