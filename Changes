@@ -1,5 +1,23 @@
 Revision history for ApacheDBI.
 
+0.79  Jun 06, 1998
+	- implemented a simple caching mechanism in AuthenDBI as 
+	  well as in AuthzDBI. Per default this cache is disabled 
+	  and can be enabled by setting Auth_DBI_cache_time > 0. 
+	  YOU NEED AT LEAST VERSION apache_1.3b6 !
+	- applied patch from Jeff Baker <jeff@godzilla.tamu.edu>
+	  fix menu item for DBI connections that are made using 
+	  the Oracle TNS listener.
+	- implemented proposal from Leslie Mikesell <les@Mcs.Net>
+	  change group-handling in AuthzDBI. All groups related to
+	  the given user are selected at once and then put into a 
+	  comma-separated list. This list is compared with the 
+	  required groups. 
+	  Depending upon the existence of Auth_DBI_grp_table, the 
+	  SQL-select looks either in the pwd_table or in the 
+	  grp_table for the groupid. PLEASE CHECK THE MODULE 
+	  DOCUMENTATION AND YOUR .htaccess !
+
 0.78  February 18, 1998
         - applied patch from "B. W. Fitzpatrick" <fitz@onShore.com>
           DBI calls connect always with 4 parameters, even if they
@@ -19,7 +37,7 @@ Revision history for ApacheDBI.
 
 0.75 November 02, 1997
 	- strip trailing blanks from password for 
-	  fixed-length datatype
+	  fixed-length data type
 	- new token: 'Auth_DBI_casesensitive'
 	  (Hakan Tandogan <hakan@iconsult.com>
         - fixed bug when using attributes in connect method

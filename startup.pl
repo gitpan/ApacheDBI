@@ -4,6 +4,7 @@
 $ENV{GATEWAY_INTERFACE} =~ /^CGI-Perl/ or die "GATEWAY_INTERFACE not Perl!";
 
 use Apache::Registry;
+use Apache::Status;
 use Apache::DBI;
 #use Apache::AuthenDBI;
 #use Apache::AuthzDBI;

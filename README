@@ -1,6 +1,6 @@
 #-------------------------------------------------------
 #
-# $Id: README,v 1.17 1998/02/18 20:27:34 mergl Exp $
+# $Id: README,v 1.19 1998/06/07 16:50:27 mergl Exp $
 #
 #-------------------------------------------------------
 
@@ -8,7 +8,7 @@
 DESCRIPTION:
 ------------
 
-This is version 0.78 of Apache::AuthenDBI.pm, Apache::AuthzDBI.pm, 
+This is version 0.79 of Apache::AuthenDBI.pm, Apache::AuthzDBI.pm, 
 Apache::DBI.pm and DebugDBI.pm.
 
 These four modules are supposed to be used with the Apache daemon together 
@@ -55,9 +55,7 @@ URL/.htaccess:
   PerlSetVar Auth_DBI_pwd_field     password
   #SELECT pwd_field FROM pwd_table WHERE uid_field=$user
 
-  <Limit GET>
   require user myuser
-  </Limit>
 
 In this example it is assumed, that your database contains a table named 
 'users' which has at least the two columns 'username' and 'password'. When 
@@ -70,6 +68,8 @@ specified URL.
 Please do not confuse this user authentication with the username/password 
 needed for the database connect. These two authentications are completely 
 independent !
+
+Windows users should turn off the case-sensitive option.
 
 
 2. group authorization
@@ -97,15 +97,12 @@ URL/.htaccess:
   # DBI->connect($data_source, $username, $password)
 
   PerlSetVar Auth_DBI_pwd_table     users
-  PerlSetVar Auth_DBI_grp_table     users
   PerlSetVar Auth_DBI_uid_field     username
   PerlSetVar Auth_DBI_pwd_field     password
   PerlSetVar Auth_DBI_grp_field     groupname
-  #SELECT grp_field FROM grp_table WHERE uid_field=$user AND grp_field=$group
+  #SELECT grp_field FROM pwd_table WHERE uid_field=$user
 
-  <Limit GET>
   require group mygroup
-  </Limit>
 
 In this example it is assumed, that your database contains a table named 
 'users' which has at least the three columns 'username', 'password' and 
@@ -113,9 +110,9 @@ In this example it is assumed, that your database contains a table named
 asking for username and password. The first check (authentication) retrieves 
 for the given username the password from the database. This is compared with 
 the crypted password given by the user. In a second check (authorization) 
-the group of the given username is looked up in the database and compared with 
-the group required in the .htaccess file. If both checks succeed, the user is 
-given access to the specified URL. 
+the groups of the given username are looked up in the database and compared 
+with the groups required in the .htaccess file. If both checks succeed, the 
+user is given access to the specified URL. 
 
 Please do not confuse the user authentication with the username/password 
 needed for the database connect. These two authentications are completely 
@@ -153,7 +150,7 @@ If you plan to use persistent database connections, there is only one thing
 to do: add the following configuration directive to conf/httpd.conf:
 
   PerlModule Apache::DBI    # this comes first !!
-  ....                      # other Apache modules
+  ....                      # other ApacheDBI modules
 
 Do not change your perl scripts ! In particular do not add any 
 'use Apache::DBI;' statements. Also there is no need to remove 
@@ -181,8 +178,12 @@ httpd.conf:
 
 This way all modules are pulled into the main httpd process. When the 
 main process forks his children, the code of all modules is already in 
-place and the database handle will also be initiated. For further 
-information read the mod_perl_tuning guide of Vivek Khera. 
+place and the database handle will also be initiated. 
+
+WARNING: Do not attempt to open a persistent database connection in the parent process 
+(via PerlRequire or PerlModule). If you do, children will get a copy of this handle, 
+causing clashes when the handle is used by two processes at the same time. Each child 
+must have it's own unique connection handle. 
 
 If you want to make sure that the module works correctly, turn on debugging 
 as described below and search for 'Apache::DBI' in the output. You should 
@@ -191,6 +192,10 @@ should result in a 'already connected' message. Please keep in mind, that
 httpd processes may be killed as well as newly created depending upon your 
 configuration and depending upon your load. Every new process needs to do his 
 own initial database connect. 
+
+Another useful method for better performance is to enable the caching in 
+AuthenDBI and AuthzDBI setting Auth_DBI_cache_time > 0. This will reduce 
+considerably the database load. 
 
 
 COPYRIGHT:
@@ -203,10 +208,10 @@ License or the Artistic License, as specified in the Perl README file.
 PREREQUISITES:
 --------------
 
-For AuthenDBI and AuthzDBI configure mod_perl with: 
+Configure mod_perl with: 
 
-  perl Makefile.PL PERL_AUTHEN=1 PERL_AUTHZ=1
-
+  perl Makefile.PL DO_HTTPD=1 PERL_CHILD_INIT=1 PERL_AUTHEN=1 
+                   PERL_AUTHZ=1 PERL_CLEANUP=1 PERL_STACKED_HANDLERS=1
 
 
 INSTALLATION:
@@ -246,6 +251,26 @@ include the output of perl -v,
 in your bug-report.
 
 
+A common problem is an error-message that $dbh will not stay 
+shared. A complete explanation for this behavior is given 
+in the FAQ. In short, instead of this:
+
+ my $dbh = ...;
+ subroutine();
+ sub subroutine {
+   $dbh->....
+ }
+
+do this:
+
+ my $dbh = ...;
+ subroutine($dbh);
+ sub subroutine {
+   my $dbh = shift;
+   $dbh->....
+ }
+
+
 
 FURTHER INFORMATION:
 --------------------
@@ -262,7 +287,7 @@ DBI      by Tim Bunce       dbi-users@fugue.com
 
 ---------------------------------------------------------------------------
 
-   Edmund Mergl <E.Mergl@bawue.de>                     February 18, 1998
+   Edmund Mergl <E.Mergl@bawue.de>                           June 06, 1998
 
 
 ---------------------------------------------------------------------------

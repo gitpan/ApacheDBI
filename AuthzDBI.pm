@@ -6,11 +6,11 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthzDBI.pm,v 1.6 1998/02/18 20:16:43 mergl Exp $
+#$Id: AuthzDBI.pm,v 1.8 1998/06/07 16:50:26 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::AuthzDBI::VERSION = '0.78';
+$Apache::AuthzDBI::VERSION = '0.79';
 
 $Apache::AuthzDBI::DEBUG = 0;
 
@@ -20,13 +20,18 @@ my %Config = (
     'Auth_DBI_username'        => '',
     'Auth_DBI_password'        => '',
     'Auth_DBI_pwd_table'       => '',
-    'Auth_DBI_grp_table'       => '',
     'Auth_DBI_uid_field'       => '',
+    'Auth_DBI_grp_table'       => '',
     'Auth_DBI_grp_field'       => '',
     'Auth_DBI_grp_whereclause' => '',
     'Auth_DBI_authoritative'   => 'on',
     'Auth_DBI_casesensitive'   => 'on',
+    'Auth_DBI_cache_time'      => 0,
 );
+
+my %Groups;
+my %Time;
+
 
 sub handler {
 
@@ -62,9 +67,15 @@ sub handler {
     }
 
     # if not configured decline
-    unless ( $attr->{grp_table} && $attr->{uid_field} && $attr->{grp_field} ) {
+    unless ( $attr->{pwd_table} && $attr->{uid_field} && $attr->{grp_field} ) {
         printf STDERR "$prefix not configured, return DECLINED\n" if $Apache::AuthzDBI::DEBUG;
         return DECLINED;
+    }
+
+    # Do we want Windows-like case-insensitivity?
+    if ($attr->{casesensitive} eq "off")
+    {
+       $user_sent = lc($user_sent);
     }
 
     # check requirements
@@ -77,12 +88,6 @@ sub handler {
         }
         printf STDERR "$prefix no requirements and not authoritative, return DECLINED\n" if $Apache::AuthzDBI::DEBUG;
         return DECLINED;
-    }
-
-    # Do we want Windows-like case-insensitivity?
-    if ($attr->{casesensitive} eq "off")
-    {
-       $user_sent   = lc($user_sent);
     }
 
     # iterate over all requirement directives
@@ -116,30 +121,32 @@ sub handler {
         if ( $group_result != OK && $require[0] eq 'group' ) {
             $group_result = AUTH_REQUIRED;
 
-            unless ( $attr->{data_source} ) {
-                $r->log_reason("missing source parameter for database connect", $r->uri);
-                return SERVER_ERROR;
-            }
+            # check if the user is cached
+            my ($group, $groups);
+            if ( ! ($groups = $Groups{$user_sent}) ) {
 
-            # connect to database
-            my $dbh;
-            unless ($dbh = DBI->connect($attr->{data_source}, $attr->{username}, $attr->{password})) {
-                $r->log_reason("db connect error with $attr->{data_source}", $r->uri);
-                return SERVER_ERROR;
-            }
+                unless ( $attr->{data_source} ) {
+                    $r->log_reason("missing source parameter for database connect", $r->uri);
+                    return SERVER_ERROR;
+                }
 
-            $user_sent = $dbh->quote($user_sent);
+                # connect to database
+                my $dbh;
+                unless ($dbh = DBI->connect($attr->{data_source}, $attr->{username}, $attr->{password})) {
+                    $r->log_reason("db connect error with $attr->{data_source}", $r->uri);
+                    return SERVER_ERROR;
+                }
 
-            for ($i = 1; $i <= $#require; $i++ ) {
-
-                my ($group) = $dbh->quote($require[$i]);
+                # generate statement
+                my $user_sent_quoted = $dbh->quote($user_sent);
                 my $statement;
-
-                if ($attr->{pwd_table} && $attr->{grp_whereclause}) {
-                    $statement = "SELECT $attr->{grp_table}.$attr->{grp_field} FROM $attr->{pwd_table}, $attr->{grp_table} " .
-                                 " WHERE $attr->{pwd_table}.$attr->{uid_field}=$user_sent AND $attr->{grp_table}.$attr->{grp_field}=$group AND $attr->{grp_whereclause}";
+                if ($attr->{grp_table}) {
+                    $statement = "SELECT $attr->{grp_field} FROM $attr->{grp_table} WHERE $attr->{uid_field}=$user_sent_quoted";
                 } else {
-                    $statement = "SELECT $attr->{grp_field} FROM $attr->{grp_table} WHERE $attr->{uid_field}=$user_sent AND $attr->{grp_field}=$group";
+                    $statement = "SELECT $attr->{grp_field} FROM $attr->{pwd_table} WHERE $attr->{uid_field}=$user_sent_quoted";
+                }
+                if ($attr->{grp_whereclause}) {
+                    $statement .= " AND $attr->{grp_whereclause}";
                 }
                 print STDERR "$prefix statement = $statement\n" if $Apache::AuthzDBI::DEBUG;
 
@@ -159,26 +166,41 @@ sub handler {
                     return SERVER_ERROR;
                 }
 
-                # fetch result
-                $group = $sth->fetchrow_array;
-
-                # strip trailing blanks for fixed-length datatype
-                $group =~ s/ +$//;
-                print STDERR "$prefix group = >$group<\n" if $Apache::AuthzDBI::DEBUG;
+                # fetch result and build comma separated group-list
+                while ( $group = $sth->fetchrow_array ) {
+                    # strip trailing blanks for fixed-length datatype
+                    $group =~ s/ +$//;
+                    $groups .= "," if $groups;
+                    $groups .= $group;
+                }
 
                 $sth->finish;
+                $dbh->disconnect;
 
-                # check group
-                if ( $require[$i] eq $group ) {
-                    $group_result = OK;
-                    $r->subprocess_env(REMOTE_GROUP => $group);
-                    print STDERR "$prefix group_result = OK: $require[$i] = $group\n" if $Apache::AuthzDBI::DEBUG;
-                    last;
+                $Groups{$user_sent} = $groups;
+	    }
+            $r->subprocess_env(REMOTE_GROUPS => $groups);
+            print STDERR "$prefix groups = >$groups<\n" if $Apache::AuthzDBI::DEBUG;
+
+            # update timestamp
+            $Time{$user_sent} = time;
+
+            # skip through the required groups until the first matches
+            REQUIRE: for ($i = 1; $i <= $#require; $i++ ) {
+
+		foreach $group (split ',', $groups) {
+
+                    # check group
+                    if ( $require[$i] eq $group ) {
+                        $group_result = OK;
+                        $r->subprocess_env(REMOTE_GROUP => $group);
+                        print STDERR "$prefix group_result = OK: $require[$i] = $group\n" if $Apache::AuthzDBI::DEBUG;
+                        last REQUIRE;
+                    }
                 }
 	    }
 
-            $dbh->disconnect;
-
+            # no group found
             if ( $attr->{authoritative} eq 'on' && $group_result != OK ) {
                 $r->log_reason("user $user_sent not in right groups, (DBI-Authoritative)", $r->uri);
                 $r->note_basic_auth_failure;
@@ -190,6 +212,22 @@ sub handler {
         if ( $require[0] eq 'valid-user' ) {
             $user_result = OK;
             print STDERR "$prefix user_result = OK: valid-user\n" if $Apache::AuthzDBI::DEBUG;
+        }
+
+        # after finishing the request the handler checks the password-cache and deletes any outdated users
+        if(Apache->can('push_handlers')) {
+            Apache->push_handlers(PerlCleanupHandler => sub {
+                print STDERR "$$ Apache::AuthzDBI PerlCleanupHandler \n" if $Apache::AuthzDBI::DEBUG;
+                my $now = time;
+                my $user;
+                foreach $user (keys %Groups) {
+                    if ($now - $Time{$user} >= $attr->{cache_time}) {
+                        print STDERR "$$ Apache::AuthzDBI delete $user from cache \n" if $Apache::AuthzDBI::DEBUG;
+                        delete $Groups{$user};
+                        delete $Time{$user};
+                    }
+                }
+            });
         }
     }
 
@@ -239,15 +277,13 @@ Apache::AuthzDBI - Authorization via Perl's DBI
  PerlSetVar Auth_DBI_password      db_password
  #DBI->connect($data_source, $username, $password)
 
- PerlSetVar Auth_DBI_grp_table     users
+ PerlSetVar Auth_DBI_pwd_table     users
  PerlSetVar Auth_DBI_uid_field     username
  PerlSetVar Auth_DBI_grp_field     groupname
- #SELECT grp_field FROM grp_table WHERE uid_field=$user AND grp_field=$group
+ #SELECT grp_field FROM pwd_table WHERE uid_field=$user
 
- <Limit GET>
  require user   user_1  user_2 ...
  require group group_1 group_2 ...
- </Limit>
 
 The AuthType is limited to Basic. You may use one or more valid require 
 lines. For a single require line with the tokens valid-user or with  
@@ -271,10 +307,12 @@ In case of one or more user-names, they are compared with the given user-name
 until the first match. If there is no match and the authoritative directive 
 is set to 'on' the request is rejected. 
 
-In case of one or more group-names, for every group the given user is looked 
-up in the database with the constraint, that the user must be a member of this 
-group. If there is no match and the authoritative directive is set to 'on' the 
-request is rejected. 
+In case of one or more group-names, all groups of the given user-name are 
+looked up in the cache. If the user is not found in the cache, the groups are 
+requested from the database. A comma separated list of all these groups is put 
+into the environment variable REMOTE_GROUPS. Then these groups are compared 
+with the required groups until the first match. If there is no match and the 
+authoritative directive is set to 'on' the request is rejected. 
 
 In case of 'valid-user' the request is accepted. 
 
@@ -282,11 +320,27 @@ In case the authorization succeeds, the environment variable REMOTE_GROUP is
 set to the group name, so scripts that are protected by AuthzDBI don't need to 
 bang on the database server again to get the group name.
 
-The SQL-select used for retrieving the group is as follows (depending upon the 
-existence of a grp_whereclause): 
+The SQL-select used for retrieving the groups is as follows (depending upon the 
+existence of a grp_table): 
 
- SELECT grp_field FROM grp_table WHERE uid_field = user AND grp_field = group
- SELECT grp_table.grp_field FROM pwd_table, grp_table WHERE pwd_table.uid_field = user AND grp_table.grp_field = group AND grp_whereclause
+ SELECT grp_field FROM pwd_table WHERE uid_field = user
+ SELECT grp_field FROM grp_table WHERE uid_field = user
+
+This way you can have the group-information either in the main users table, or 
+you can use an extra table, if you have an m:n relationship between users and 
+groups. From all selected groups a comma-separated list is build, which is 
+compared with the required groups. If you don't like normalized group records 
+you can put such a comma-separated list of groups (no spaces) into the grp_field 
+instead of single groups. 
+
+If a grp_whereclause exists, it is appended to the SQL-select.
+
+At the end a CleanupHandler is initialized, which skips through the groups 
+cache and deletes all outdated entries. This is done after sending the response, 
+hence without slowing down response time to the client. The default cache_time 
+is set to 0, which disables the cache, because any user will be deleted 
+immediately from the cache. 
+
 
 =head1 LIST OF TOKENS
 
@@ -327,7 +381,7 @@ Field-name containing the groupname in the Auth_DBI_grp_table.
 =item *
 Auth_DBI_grp_whereclause
 
-Use this option for using more attributes in the group table.
+Use this option for specifying more constraints to the SQL-select.
 
 =item *
 Auth_DBI_authoritative  < on / off>
@@ -343,11 +397,23 @@ Auth_DBI_casesensitive  < on / off >
 Default is 'on'. When set 'off', the entered userid and password is converted 
 to lower case. 
 
+=item *
+Auth_DBI_cache_time
+Default is 0 = off. When set to any value > 0, the groups of all users will 
+be cached. After finishing the request, a special handler skips through the 
+cache and deletes all outdated entries (entries, which are older than the 
+cache_time). 
+
 
 =head1 CONFIGURATION
 
 The module should be loaded upon startup of the Apache daemon. 
 It needs the AuthenDBI module for the authentication part. 
+Note that this needs mod_perl-1.08 or higher, apache_1.3b6 or higher and that 
+mod_perl needs to be configured with 
+
+  PERL_AUTHEN=1 PERL_AUTHZ=1 PERL_CLEANUP=1 PERL_STACKED_HANDLERS=1. 
+
 Add the following lines to your httpd.conf or srm.conf:
 
  PerlModule Apache::AuthenDBI
@@ -356,10 +422,10 @@ Add the following lines to your httpd.conf or srm.conf:
 
 =head1 PREREQUISITES
 
-For AuthzDBI you need to enable the appropriate call-back hooks when making 
-mod_perl: 
+For AApache::uthzDBI you need to enable the appropriate call-back hooks when 
+making mod_perl: 
 
-  perl Makefile.PL PERL_AUTHEN=1 PERL_AUTHZ=1. 
+  perl Makefile.PL DO_HTTPD=1 PERL_AUTHEN=1 PERL_AUTHZ=1 PERL_CLEANUP=1 PERL_STACKED_HANDLERS=1. 
 
 
 =head1 SEE ALSO
