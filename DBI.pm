@@ -3,13 +3,11 @@ package Apache::DBI;
 use DBI ();
 use strict;
 
-#$Id: DBI.pm,v 1.8 1997/05/20 20:09:37 mergl Exp $
+#$Id: DBI.pm,v 1.9 1997/06/29 09:41:27 mergl Exp $
 
-require_version DBI 0.81;
+require_version DBI 0.85;
 
-my $VERSION = '0.6';
-
-my $DEBUG = $ENV{APACHE_DBI_DEBUG} || 0;
+my $VERSION = '0.7';
 
 my %Connected;
 
@@ -21,11 +19,16 @@ sub connect {
     my @args = map { defined $_ ? $_ : "" } @_;
     my $idx  = join (":", (@args));
 
-    return (bless $Connected{$idx}, 'Apache::DBI::db') if ($Connected{$idx} && $Connected{$idx}->ping);
+    my $APACHE_DBI_DEBUG = $ENV{APACHE_DBI_DEBUG} || 0;
 
-    print STDERR "Pid = $$, Apache::DBI::connect to '$idx'\n" if $DEBUG;
+    if (($Connected{$idx} && $Connected{$idx}->ping)) {
+        print STDERR "Pid = $$, Apache::DBI::connect already connected to '$idx'\n" if $APACHE_DBI_DEBUG;
+        return (bless $Connected{$idx}, 'Apache::DBI::db') if ($Connected{$idx} && $Connected{$idx}->ping);
+    }
+
     $Connected{$idx} = $drh->connect(@args);
     $Connected{$idx}->{InactiveDestroy} = 1;
+    print STDERR "Pid = $$, Apache::DBI::connect new connect to '$idx'\n" if $APACHE_DBI_DEBUG;
     return (bless $Connected{$idx}, 'Apache::DBI::db');
 }
 
@@ -58,15 +61,18 @@ Apache::Status->menu_item(
 
 __END__
 
+
 =head1 NAME
 
 Apache::DBI - Initiate a persistent database connection
+
 
 =head1 SYNOPSIS
 
  # Configuration in httpd.conf or srm.conf
 
  PerlModule Apache::DBI
+
 
 =head1 DESCRIPTION
 
@@ -76,11 +82,18 @@ The database access uses Perl's DBI. For supported DBI drivers see:
 
  http://www.hermetica.com/technologia/DBI/
 
-When connecting to a database the module looks if a database handle 
-from a previous connect request is already stored. If not, a new 
+When loading the DBI module it looks if the environment variable 
+GATEWAY_INTERFACE starts with 'CGI-Perl' and if the module 
+Apache::DBI has been loaded. In this case every connect request 
+will be forwarded to the Apache::DBI module. This looks if a database 
+handle from a previous connect request is already stored and if this 
+handle is still valid using the ping method. If these two conditions 
+are fulfilled it just returns the database handle. If there is no 
+appropriate database handle or if the ping method fails, a new 
 connection is established and the handle is stored for later re-use. 
 There is no need to delete the disconnect statements from your code. 
-They won't do anything because this module hides the database handle. 
+They won't do anything because the Apache::DBI module hides the 
+database handle. 
 
 The Apache::DBI module still has a limitation: it keeps database 
 connections persistent on a per process basis. The problem is, if 
@@ -113,9 +126,20 @@ happens to serve the current request. Other httpd children might have
 other database connections. 
 
 
+=head1 DEBUGGING
+
+To turn on debugging add the following line to httpd.conf: 
+
+  PerlSetEnv APACHE_DBI_DEBUG 1
+
+Watch the output after restarting the httpd as well as the error 
+logfile. 
+
+
 =head1 SEE ALSO
 
 Apache(3), DBI(3)
+
 
 =head1 AUTHORS
 
