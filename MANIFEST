@@ -1,6 +1,9 @@
 AuthenDBI.pm
+AuthzDBI.pm
 Changes
 DBI.pm
+DebugDBI.pm
 MANIFEST
 Makefile.PL
 README
+test.pl
