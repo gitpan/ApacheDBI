@@ -1,5 +1,17 @@
 Revision history for ApacheDBI.
 
+0.74 August 15, 1997
+        - new module: AuthzDBI for Authorization,
+          (supports group authorization)
+        - complete rewrite of AuthenDBI.
+        - configuration directives and functionality 
+          of both modules are supposed to be identical
+          with mod_auth_msql of the apache daemon.
+	- adapted to new DBI connect syntax
+	- changed names of config vars to be more
+          consistent with other authentication modules.
+          PLEASE ADAPT YOUR CONFIGURATION !!!
+
 0.73 July 15, 1997
 	- fixed bug in DBI.pm: check return value of connect
 
