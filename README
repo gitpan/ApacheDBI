@@ -1,0 +1,83 @@
+#-------------------------------------------------------
+#
+# $Id: README,v 1.1.1.1 1997/03/15 22:03:35 mergl Exp $
+#
+#-------------------------------------------------------
+
+
+DESCRIPTION:
+------------
+
+This is version 0.1 of Apache::DBI.pm.
+
+This module provides a persistent database connection via DBI. 
+It is supposed to be used with the Apache daemon together with 
+an embedded perl interpreter like mod_perl. With the first database 
+access the connection to the database is established. It remains 
+open for the lifetime of the httpd, if not an explicit destroy of 
+the database handle drops the connection. This way, the time 
+consuming connect and disconnect with standard CGI for every 
+database access becomes superfluous. 
+
+
+
+USAGE:
+------
+
+In your perl scripts you have to replace the command 
+
+          use DBI;
+with
+          use Apache::DBI;
+
+Also replace every 
+
+         DBI->connect()
+with
+         Apache::DBI->connect()
+
+The connect() function returns the last database handle. If the 
+database handle is not valid, a new connection is established. 
+
+
+
+INSTALLATION:
+-------------
+
+1.   perl Makefile.PL
+2.   make
+4.   make install
+
+
+
+IF YOU HAVE PROBLEMS:
+---------------------
+
+Please send comments and bug-reports to <E.Mergl@bawue.de>
+
+Please include the output of perl -v,
+           and the output of perl -V,
+              and the version of DBI,
+                and the used database
+in your bug-report.
+
+
+
+FURTHER INFORMATION:
+--------------------
+
+Apache   by Apache Group    http://www.apache.org/
+
+DBI      by Tim Bunce       <Tim.Bunce@ig.co.uk>
+                            http://www.hermetica.com/technologia/DBI/
+
+mod_perl by Doug MacEachern <dougm@osf.org>
+                            http://www.osf.org/~dougm/apache/
+
+
+
+---------------------------------------------------------------------------
+
+   Edmund Mergl <E.Mergl@bawue.de>                       March 15, 1997
+
+---------------------------------------------------------------------------
