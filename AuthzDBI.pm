@@ -6,24 +6,26 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthzDBI.pm,v 1.5 1998/01/18 21:11:19 mergl Exp $
+#$Id: AuthzDBI.pm,v 1.6 1998/02/18 20:16:43 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::AuthzDBI::VERSION = '0.77';
+$Apache::AuthzDBI::VERSION = '0.78';
 
 $Apache::AuthzDBI::DEBUG = 0;
 
 
 my %Config = (
-    'Auth_DBI_data_source'    => '',
-    'Auth_DBI_username'       => '',
-    'Auth_DBI_password'       => '',
-    'Auth_DBI_grp_table'      => '',
-    'Auth_DBI_uid_field'      => '',
-    'Auth_DBI_grp_field'      => '',
-    'Auth_DBI_authoritative'  => 'on',
-    'Auth_DBI_casesensitive'  => 'on',
+    'Auth_DBI_data_source'     => '',
+    'Auth_DBI_username'        => '',
+    'Auth_DBI_password'        => '',
+    'Auth_DBI_pwd_table'       => '',
+    'Auth_DBI_grp_table'       => '',
+    'Auth_DBI_uid_field'       => '',
+    'Auth_DBI_grp_field'       => '',
+    'Auth_DBI_grp_whereclause' => '',
+    'Auth_DBI_authoritative'   => 'on',
+    'Auth_DBI_casesensitive'   => 'on',
 );
 
 sub handler {
@@ -131,14 +133,21 @@ sub handler {
             for ($i = 1; $i <= $#require; $i++ ) {
 
                 my ($group) = $dbh->quote($require[$i]);
+                my $statement;
 
-                my $statement = "SELECT $attr->{grp_field} FROM $attr->{grp_table} WHERE $attr->{uid_field}=$user_sent AND $attr->{grp_field}=$group";
+                if ($attr->{pwd_table} && $attr->{grp_whereclause}) {
+                    $statement = "SELECT $attr->{grp_table}.$attr->{grp_field} FROM $attr->{pwd_table}, $attr->{grp_table} " .
+                                 " WHERE $attr->{pwd_table}.$attr->{uid_field}=$user_sent AND $attr->{grp_table}.$attr->{grp_field}=$group AND $attr->{grp_whereclause}";
+                } else {
+                    $statement = "SELECT $attr->{grp_field} FROM $attr->{grp_table} WHERE $attr->{uid_field}=$user_sent AND $attr->{grp_field}=$group";
+                }
                 print STDERR "$prefix statement = $statement\n" if $Apache::AuthzDBI::DEBUG;
 
                 # prepare statement
                 my $sth;
                 unless ($sth = $dbh->prepare($statement)) {
                     $r->log_reason("can not prepare statement: $DBI::errstr", $r->uri);
+                    $dbh->disconnect;
                     return SERVER_ERROR;
                 }
 
@@ -146,6 +155,7 @@ sub handler {
                 my $rv;
                 unless ($rv = $sth->execute) {
                     $r->log_reason("can not execute statement: $DBI::errstr", $r->uri);
+                    $dbh->disconnect;
                     return SERVER_ERROR;
                 }
 
@@ -272,6 +282,11 @@ In case the authorization succeeds, the environment variable REMOTE_GROUP is
 set to the group name, so scripts that are protected by AuthzDBI don't need to 
 bang on the database server again to get the group name.
 
+The SQL-select used for retrieving the group is as follows (depending upon the 
+existence of a grp_whereclause): 
+
+ SELECT grp_field FROM grp_table WHERE uid_field = user AND grp_field = group
+ SELECT grp_table.grp_field FROM pwd_table, grp_table WHERE pwd_table.uid_field = user AND grp_table.grp_field = group AND grp_whereclause
 
 =head1 LIST OF TOKENS
 
@@ -308,6 +323,11 @@ Field-name containing the username in the Auth_DBI_grp_table.
 Auth_DBI_grp_field
 
 Field-name containing the groupname in the Auth_DBI_grp_table. 
+
+=item *
+Auth_DBI_grp_whereclause
+
+Use this option for using more attributes in the group table.
 
 =item *
 Auth_DBI_authoritative  < on / off>

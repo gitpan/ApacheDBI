@@ -6,28 +6,29 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthenDBI.pm,v 1.17 1998/01/18 21:11:19 mergl Exp $
+#$Id: AuthenDBI.pm,v 1.18 1998/02/18 20:16:42 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::AuthenDBI::VERSION = '0.77';
+$Apache::AuthenDBI::VERSION = '0.78';
 
 $Apache::AuthenDBI::DEBUG = 0;
 
 
 my %Config = (
-    'Auth_DBI_data_source'    => '',
-    'Auth_DBI_username'       => '',
-    'Auth_DBI_password'       => '',
-    'Auth_DBI_pwd_table'      => '',
-    'Auth_DBI_uid_field'      => '',
-    'Auth_DBI_pwd_field'      => '',
-    'Auth_DBI_log_field'      => '',
-    'Auth_DBI_log_string'     => '',
-    'Auth_DBI_authoritative'  => 'on',
-    'Auth_DBI_nopasswd'       => 'off',
-    'Auth_DBI_encrypted'      => 'on',
-    'Auth_DBI_casesensitive'  => 'on',
+    'Auth_DBI_data_source'     => '',
+    'Auth_DBI_username'        => '',
+    'Auth_DBI_password'        => '',
+    'Auth_DBI_pwd_table'       => '',
+    'Auth_DBI_uid_field'       => '',
+    'Auth_DBI_pwd_field'       => '',
+    'Auth_DBI_pwd_whereclause' => '',
+    'Auth_DBI_log_field'       => '',
+    'Auth_DBI_log_string'      => '',
+    'Auth_DBI_authoritative'   => 'on',
+    'Auth_DBI_nopasswd'        => 'off',
+    'Auth_DBI_encrypted'       => 'on',
+    'Auth_DBI_casesensitive'   => 'on',
 );
 
 sub handler {
@@ -91,14 +92,20 @@ sub handler {
     }
 
     $user_sent  = $dbh->quote($user_sent);
+    my $statement;
 
-    my $statement = "SELECT $attr->{pwd_field} FROM $attr->{pwd_table} WHERE $attr->{uid_field}=$user_sent";
+    if ($attr->{pwd_whereclause}) {
+        $statement = "SELECT $attr->{pwd_field} FROM $attr->{pwd_table} WHERE $attr->{uid_field}=$user_sent AND $attr->{pwd_whereclause}";
+    } else {
+        $statement = "SELECT $attr->{pwd_field} FROM $attr->{pwd_table} WHERE $attr->{uid_field}=$user_sent";
+    }
     print STDERR "$prefix statement = $statement\n" if $Apache::AuthenDBI::DEBUG;
 
     # prepare statement
     my $sth;
     unless ($sth = $dbh->prepare($statement)) {
 	$r->log_reason("$prefix can not prepare statement: $DBI::errstr", $r->uri);
+        $dbh->disconnect;
 	return SERVER_ERROR;
     }
 
@@ -106,6 +113,7 @@ sub handler {
     my $rv;
     unless ($rv = $sth->execute) {
 	$r->log_reason("$prefix can not execute statement: $DBI::errstr", $r->uri);
+        $dbh->disconnect;
 	return SERVER_ERROR;
     }
 
@@ -162,6 +170,7 @@ sub handler {
         print STDERR "$prefix statement = $statement\n" if $Apache::AuthenDBI::DEBUG;
         unless ($dbh->do($statement)) {
             $r->log_reason("$prefix can not do statement: $DBI::errstr", $r->uri);
+            $dbh->disconnect;
             return SERVER_ERROR;
         }
     }
@@ -241,12 +250,21 @@ directive is set to 'off' the plain-text passwords are compared.
 If this comparison fails the request is rejected, otherwise the request is 
 accepted. 
 
+The SQL-select used for retrieving the password is as follows (depending upon the 
+existence of a pwd_whereclause): 
+
+ SELECT pwd_field FROM pwd_table WHERE uid_field = user
+ SELECT pwd_field FROM pwd_table WHERE uid_field = user AND pwd_whereclause
+
 This module supports in addition a simple kind of logging mechanism. Whenever 
 the handler is called and a log_string is configured, the log_field will be 
 updated with the log_string. As log_string - depending upon the database - 
 macros like TODAY can be used. 
 
+The SQL-select used for the loging mechanism is as follows: 
 
+ UPDATE pwd_table SET log_field = log_string WHERE uid_field = user
+ 
 =head1 LIST OF TOKENS
 
 =item *
@@ -283,6 +301,11 @@ Field name containing the username in the Auth_DBI_pwd_table.
 Auth_DBI_pwd_field
 
 Field name containing the password in the Auth_DBI_pwd_table. 
+
+=item *
+Auth_DBI_pwd_whereclause
+
+Use this option for using more attributes in the password table.
 
 =item *
 Auth_DBI_log_field

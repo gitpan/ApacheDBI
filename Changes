@@ -1,5 +1,14 @@
 Revision history for ApacheDBI.
 
+0.78  February 18, 1998
+        - applied patch from "B. W. Fitzpatrick" <fitz@onShore.com>
+          DBI calls connect always with 4 parameters, even if they
+          are empty. This results in an error with DBD-Informix.
+        - added '$dbh->disconnect' before 'return SERVER_ERROR;'
+          (fyodor@mp.aha.ru <Fyodor Krasnov>).
+	- added optional where-clause in AuthenDBI as well as
+          in AuthzDBI (Helmut Patay <Helmut.Patay@mch.sni.de>).
+
 0.77 January 18, 1998
         - applied patches from Doug MacEachern:
           o new method  Apache::DBI->connect_on_init()

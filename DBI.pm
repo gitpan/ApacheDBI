@@ -3,11 +3,11 @@ package Apache::DBI;
 use DBI ();
 use strict;
 
-#$Id: DBI.pm,v 1.18 1998/01/18 21:11:19 mergl Exp $
+#$Id: DBI.pm,v 1.19 1998/02/18 20:16:43 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::DBI::VERSION = '0.77';
+$Apache::DBI::VERSION = '0.78';
 
 $Apache::DBI::DEBUG = 0;
 
@@ -45,6 +45,8 @@ sub connect {
        while (($key,$val) = each %{$args[3]}) {
            $idx .= ":$key=$val";
        }
+    } elsif (3 == $#args) {
+        pop @args;
     }
 
     if (($Connected{$idx} && $Connected{$idx}->ping)) {
