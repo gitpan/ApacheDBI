@@ -6,11 +6,11 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthenDBI.pm,v 1.20 1998/06/07 16:50:25 mergl Exp $
+#$Id: AuthenDBI.pm,v 1.22 1998/07/26 05:30:52 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::AuthenDBI::VERSION = '0.79';
+$Apache::AuthenDBI::VERSION = '0.80';
 
 $Apache::AuthenDBI::DEBUG = 0;
 
@@ -32,6 +32,7 @@ my %Config = (
     'Auth_DBI_cache_time'      => 0,
 );
 
+# global cache
 my %Passwd;
 my %Time;
 
@@ -133,12 +134,13 @@ sub handler {
         $sth->finish;
         $dbh->disconnect;
 
-        $Passwd{$user_sent} = $passwd;
+        # cache userid/password if cache_time is configured
+        $Passwd{$user_sent} = $passwd if $attr->{cache_time} > 0;
     }
     print STDERR "$prefix passwd = >$passwd<\n" if $Apache::AuthenDBI::DEBUG;
 
-    # update timestamp
-    $Time{$user_sent} = time;
+    # update timestamp if cache_time is configured
+    $Time{$user_sent} = time if $attr->{cache_time} > 0;
 
     # check password
     if ( ! defined($passwd) ) {
@@ -167,8 +169,7 @@ sub handler {
 
     # check here is crypt is needed
     if ( $attr->{encrypted} eq 'on' ) {
-        my ($salt) = substr($passwd, 0, 2);
-        $passwd_sent = crypt($passwd_sent, $salt);
+        $passwd_sent = crypt($passwd_sent, $passwd);
     }
 
     # check password
@@ -197,7 +198,8 @@ sub handler {
     }
 
     # after finishing the request the handler checks the password-cache and deletes any outdated users
-    if(Apache->can('push_handlers')) {
+    # note: the CleanupHandler runs after the response has been sent to the client
+    if($attr->{cache_time} > 0 && Apache->can('push_handlers')) {
         Apache->push_handlers(PerlCleanupHandler => sub {
             print STDERR "$$ Apache::AuthenDBI PerlCleanupHandler \n" if $Apache::AuthenDBI::DEBUG;
             my $now = time;
@@ -401,7 +403,7 @@ cache_time).
 =head1 CONFIGURATION
 
 The module should be loaded upon startup of the Apache daemon.
-Note that this needs mod_perl-1.08 or higher, apache_1.3b6 or higher and that 
+Note that this needs mod_perl-1.08 or higher, apache_1.3.0 or higher and that 
 mod_perl needs to be configured with 
 
   PERL_AUTHEN=1 PERL_CLEANUP=1 PERL_STACKED_HANDLERS=1. 

@@ -1,6 +1,6 @@
 #-------------------------------------------------------
 #
-# $Id: README,v 1.19 1998/06/07 16:50:27 mergl Exp $
+# $Id: README,v 1.21 1998/07/26 05:30:53 mergl Exp $
 #
 #-------------------------------------------------------
 
@@ -8,17 +8,17 @@
 DESCRIPTION:
 ------------
 
-This is version 0.79 of Apache::AuthenDBI.pm, Apache::AuthzDBI.pm, 
+This is version 0.80 of Apache::AuthenDBI.pm, Apache::AuthzDBI.pm, 
 Apache::DBI.pm and DebugDBI.pm.
 
-These four modules are supposed to be used with the Apache daemon together 
+These modules are supposed to be used with the Apache server together 
 with an embedded perl interpreter like mod_perl. They provide support for 
 basic authentication via Perl's Database Independent Interface (DBI).
 
-o AuthenDBI.pm provides authentication,
-o AuthzDBI.pm  provides authorization,
-o DBI.pm provides persistent database connections. 
-o DebugDBI.pm enables debugging.
+o AuthenDBI.pm provides authentication
+o AuthzDBI.pm  provides authorization
+o DBI.pm provides persistent database connections
+o DebugDBI.pm enables debugging
 
 
 EXAMPLE:
@@ -278,7 +278,7 @@ FURTHER INFORMATION:
 Apache   by Apache Group    comp.infosystems.www.servers.unix
                             http://www.apache.org/
 
-mod_perl by Doug MacEachern MODPERL@LISTPROC.ITRIBE.NET
+mod_perl by Doug MacEachern modperl@apache.org
                             http://perl.apache.org/
 
 DBI      by Tim Bunce       dbi-users@fugue.com
@@ -287,7 +287,7 @@ DBI      by Tim Bunce       dbi-users@fugue.com
 
 ---------------------------------------------------------------------------
 
-   Edmund Mergl <E.Mergl@bawue.de>                           June 06, 1998
+   Edmund Mergl <E.Mergl@bawue.de>                           July 16, 1998
 
 
 ---------------------------------------------------------------------------

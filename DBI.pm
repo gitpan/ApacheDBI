@@ -3,11 +3,11 @@ package Apache::DBI;
 use DBI ();
 use strict;
 
-#$Id: DBI.pm,v 1.20 1998/06/07 16:50:26 mergl Exp $
+#$Id: DBI.pm,v 1.22 1998/07/26 05:30:53 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::DBI::VERSION = '0.79';
+$Apache::DBI::VERSION = '0.80';
 
 $Apache::DBI::DEBUG = 0;
 
@@ -39,7 +39,9 @@ sub connect {
     my @args = map { defined $_ ? $_ : "" } @_;
     my $idx  = "$args[0]~$args[1]~$args[2]";
 
-    # the hash_ref differs between calls even in the same process
+    # the hash-reference differs between calls even in the same
+    # process, so dereference the hash-reference 
+
     my ($key, $val);
     if (3 == $#args && ref $args[3] eq "HASH") {
        while (($key,$val) = each %{$args[3]}) {
@@ -49,10 +51,27 @@ sub connect {
         pop @args;
     }
 
+    # don't cache connections created during server initialization; they
+    # won't be useful after ChildInit, since multiple processes trying to
+    # work over the same database connection simultaneously will receive
+    # unpredictable query results.
+
+    if ($Apache::ServerStarting) {
+        print STDERR "$$ Apache::DBI skipping connection cache during server startup\n" if $Apache::DBI::DEBUG;
+        return $drh->connect(@args);
+    }
+
+    # check first if there is already a database-handle cached
+    # if this is the case, verifiy the database-handle using the 
+    # ping-method.
+
     if (($Connected{$idx} && $Connected{$idx}->ping)) {
         print STDERR "$$ Apache::DBI already connected to '$idx'\n" if $Apache::DBI::DEBUG;
         return (bless $Connected{$idx}, 'Apache::DBI::db');
     }
+
+    # either there is no database handle-cached or it is not valid,
+    # so get a new database-handle and store it in the chache
 
     $Connected{$idx} = undef;
     $Connected{$idx} = $drh->connect(@args);
@@ -173,7 +192,7 @@ This can be used as a simple way to have apache children establish connections
 on server startup. This call should be in a startup file (PerlModule, <Perl> 
 or PerlRequire). It will establish a connection when a child is started in 
 that child process. Note that this needs mod_perl-1.08 or higher, 
-apache_1.3b6 or higher and that mod_perl needs to be configured with 
+apache_1.3.0 or higher and that mod_perl needs to be configured with 
 
   PERL_CHILD_INIT=1 PERL_STACKED_HANDLERS=1
 

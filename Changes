@@ -1,5 +1,15 @@
 Revision history for ApacheDBI.
 
+0.80  Jul 26, 1998
+	- applied patch from Anto Prijosoesilo <anto@inet.co.th>:
+	  change second argument for crypt function from $salt
+	  to $passwd in order to be compatible with BSD.
+	- applied patch for Apache::DBI.pm from Randy Harmon 
+	  <rjharmon@uptimecomputers.com>: reject database connect 
+	  during server startup.
+	- call CleanupHandler in Authen DBI and AuthzDBI only if 
+	  cache_time is configured.
+
 0.79  Jun 06, 1998
 	- implemented a simple caching mechanism in AuthenDBI as 
 	  well as in AuthzDBI. Per default this cache is disabled 

@@ -6,11 +6,11 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthzDBI.pm,v 1.8 1998/06/07 16:50:26 mergl Exp $
+#$Id: AuthzDBI.pm,v 1.10 1998/07/26 05:30:53 mergl Exp $
 
 require_version DBI 0.85;
 
-$Apache::AuthzDBI::VERSION = '0.79';
+$Apache::AuthzDBI::VERSION = '0.80';
 
 $Apache::AuthzDBI::DEBUG = 0;
 
@@ -29,6 +29,7 @@ my %Config = (
     'Auth_DBI_cache_time'      => 0,
 );
 
+# global cache
 my %Groups;
 my %Time;
 
@@ -177,13 +178,14 @@ sub handler {
                 $sth->finish;
                 $dbh->disconnect;
 
-                $Groups{$user_sent} = $groups;
+                # cache userid/groups if cache_time is configured
+                $Groups{$user_sent} = $groups if $attr->{cache_time} > 0;
 	    }
             $r->subprocess_env(REMOTE_GROUPS => $groups);
             print STDERR "$prefix groups = >$groups<\n" if $Apache::AuthzDBI::DEBUG;
 
-            # update timestamp
-            $Time{$user_sent} = time;
+            # update timestamp if cache_time is configured
+            $Time{$user_sent} = time if $attr->{cache_time} > 0;
 
             # skip through the required groups until the first matches
             REQUIRE: for ($i = 1; $i <= $#require; $i++ ) {
@@ -215,7 +217,8 @@ sub handler {
         }
 
         # after finishing the request the handler checks the password-cache and deletes any outdated users
-        if(Apache->can('push_handlers')) {
+        # note: the CleanupHandler runs after the response has been sent to the client
+        if($attr->{cache_time} > 0 && Apache->can('push_handlers')) {
             Apache->push_handlers(PerlCleanupHandler => sub {
                 print STDERR "$$ Apache::AuthzDBI PerlCleanupHandler \n" if $Apache::AuthzDBI::DEBUG;
                 my $now = time;
@@ -409,7 +412,7 @@ cache_time).
 
 The module should be loaded upon startup of the Apache daemon. 
 It needs the AuthenDBI module for the authentication part. 
-Note that this needs mod_perl-1.08 or higher, apache_1.3b6 or higher and that 
+Note that this needs mod_perl-1.08 or higher, apache_1.3.0 or higher and that 
 mod_perl needs to be configured with 
 
   PERL_AUTHEN=1 PERL_AUTHZ=1 PERL_CLEANUP=1 PERL_STACKED_HANDLERS=1. 
@@ -422,7 +425,7 @@ Add the following lines to your httpd.conf or srm.conf:
 
 =head1 PREREQUISITES
 
-For AApache::uthzDBI you need to enable the appropriate call-back hooks when 
+For Apache::AuthzDBI you need to enable the appropriate call-back hooks when 
 making mod_perl: 
 
   perl Makefile.PL DO_HTTPD=1 PERL_AUTHEN=1 PERL_AUTHZ=1 PERL_CLEANUP=1 PERL_STACKED_HANDLERS=1. 
