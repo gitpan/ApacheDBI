@@ -12,10 +12,14 @@ use Apache::DBI;
 #use Apache::AuthzDBI;
 #use Apache::DebugDBI;
 
-# you need to configure mod_perl with PERL_CHILD_INIT=1 and 
-# PERL_STACKED_HANDLERS=1 for connect_on_init
-# adapt this to your environment:
-Apache::DBI->connect_on_init("dbi:driver:database", "userid", "passwd");
+# configure here all connections which should be established during server startup
+#Apache::DBI->connect_on_init("dbi:driver:database", "userid", "passwd");
+
+# optionally configure the ping behavior of the persistent database connections
+# $timeout = 0  -> always ping the database connection (default)
+# $timeout < 0  -> never  ping the database connection
+# $timeout > 0  -> ping the database connection only if the last access
+#                  was more than timeout seconds before
+#Apache::DBI->setPingTimeOut("dbi:driver:database", $timeout);
 
 1;
-

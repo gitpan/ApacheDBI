@@ -6,11 +6,11 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthenDBI.pm,v 1.32 1999/06/03 08:54:55 mergl Exp $
+#$Id: AuthenDBI.pm,v 1.34 1999/08/09 21:53:12 mergl Exp $
 
-require_version DBI 0.85;
+require_version DBI 1.00;
 
-$Apache::AuthenDBI::VERSION = '0.82';
+$Apache::AuthenDBI::VERSION = '0.83';
 
 $Apache::AuthenDBI::DEBUG = 0;
 
@@ -50,7 +50,7 @@ sub handler {
         my ($type) = '';
         $type .= 'initial ' if $r->is_initial_req;
         $type .= 'main'     if $r->is_main;
-        print STDERR "\n==========\n$prefix request type = $type\n";
+        print STDERR "==========\n$prefix request type = $type\n";
     }
 
     return OK unless $r->is_initial_req; # only the first internal request
@@ -82,23 +82,24 @@ sub handler {
     }
 
     # do we want Windows-like case-insensitivity?
-    $user_sent = lc($user_sent) if $attr->{uidcasesensitive} eq "off";
+    $user_sent   = lc($user_sent)   if $attr->{uidcasesensitive} eq "off";
     $passwd_sent = lc($passwd_sent) if $attr->{pwdcasesensitive} eq "off";
 
-    # obtain the cache hashes to use:
-    my $attr_summary= join $;, $attr->{data_source}, $attr->{pwd_table}, $attr->{uid_field}, $attr->{pwd_whereclause};
-    $Passwd{$attr_summary} = {} unless defined $Passwd{$attr_summary};
-    $Time{$attr_summary}   = {} unless defined $Time{$attr_summary};
-    my $Passwd = $Passwd{$attr_summary};
-    my $Time   = $Time{$attr_summary};
+    # obtain the id for the cache hashes
+    my $id = join $;, $user_sent, $attr->{data_source}, $attr->{pwd_table}, $attr->{uid_field};
 
-    # check whether the user is cached
-    my $passwd = $Passwd->{$user_sent};
-    # the password might have been changed
-    $passwd = '' if $passwd ne $passwd_sent;
+    # check whether the user is cached but consider that the password might have changed
+    my $passwd = '';
+    if ($Passwd{$id}) {
+        my $passwd_to_check = $attr->{encrypted} eq 'on' ? crypt($passwd_sent, $Passwd{$id}) : $passwd_sent; 
+        $passwd = $Passwd{$id} if $passwd_to_check eq $Passwd{$id};
+    }
 
-    # if password has changed or if it not cached
-    if (!$passwd) {
+    if ($passwd) { # found in cache
+        printf STDERR "$prefix passwd found in cache \n" if $Apache::AuthenDBI::DEBUG;
+    } else { # password is not cached or it has changed
+
+        # sanity check
         unless ($attr->{data_source}) {
             $r->log_reason("$prefix missing source parameter for database connect", $r->uri);
             return SERVER_ERROR;
@@ -119,7 +120,7 @@ sub handler {
         my $compare   = ($attr->{placeholder}      eq "on")  ? "?" : "$user_sent_quoted";
         my $statement = "$select $from $where $compare";
         $statement   .= " AND $attr->{pwd_whereclause}" if $attr->{pwd_whereclause};
-        print STDERR "$prefix statement = $statement\n" if $Apache::AuthenDBI::DEBUG;
+        print STDERR "$prefix statement: $statement\n" if $Apache::AuthenDBI::DEBUG;
 
         # prepare statement
         my $sth;
@@ -131,7 +132,7 @@ sub handler {
 
         # execute statement
         my $rv;
-        unless ($rv = ($attr->{placeholder} eq "on") ? $sth->execute($user_sent_quoted) : $sth->execute) {
+        unless ($rv = ($attr->{placeholder} eq "on") ? $sth->execute($user_sent) : $sth->execute) {
             $r->log_reason("$prefix can not execute statement: $DBI::errstr", $r->uri);
             $dbh->disconnect;
             return SERVER_ERROR;
@@ -142,25 +143,19 @@ sub handler {
             # strip trailing blanks for fixed-length data-type
             $_ =~ s/ +$// if $_;
             # consider the case with many users sharing the same userid
-	    $passwd .= ",$_";
+	    $passwd .= "$_$;";
         }
-        $passwd =~ s/^,//go;
+        chop $passwd if $passwd;
 
         $sth->finish;
         $dbh->disconnect;
-
-        # cache userid/password if cache_time is configured
-        $Passwd->{$user_sent} = $passwd if $attr->{cache_time} > 0;
     }
 
     print STDERR "$prefix passwd = >$passwd<\n" if $Apache::AuthenDBI::DEBUG;
 
-    # update timestamp if cache_time is configured
-    $Time->{$user_sent} = time if $attr->{cache_time} > 0;
-
     # check password
     if (!defined($passwd)) {
-            # if authoritative insist that user is in database
+        # if authoritative insist that user is in database
         if ($attr->{authoritative} eq 'on') {
             $r->log_reason("$prefix Password for user $user_sent not found", $r->uri);
             $r->note_basic_auth_failure;
@@ -186,10 +181,17 @@ sub handler {
     # check password
     my $found = 0;
     my $password;
-    foreach $password (split(/,/, $passwd)) {
+    foreach $password (split(/$;/, $passwd)) {
         # compare the two passwords possibly crypting the password if needed
-        if (($attr->{encrypted} eq 'on' and crypt($passwd_sent, $password) eq $password) or $passwd_sent eq $password) {
+        my $passwd_to_check = $attr->{encrypted} eq 'on' ? crypt($passwd_sent, $password) : $passwd_sent; 
+        if ($passwd_to_check eq $password) {
             $found = 1;
+            print STDERR "$prefix passwords match: $passwd_to_check \n" if $Apache::AuthenDBI::DEBUG;
+            # update timestamp and cache userid/password if cache_time is configured
+            if ($attr->{cache_time} > 0) {
+                $Time{$id}   = time ;
+                $Passwd{$id} = $password;
+            }
             last;
         }
     }
@@ -205,15 +207,16 @@ sub handler {
         print STDERR "$$ Apache::AuthenDBI push PerlCleanupHandler \n" if $Apache::AuthenDBI::DEBUG;
         Apache->push_handlers("PerlCleanupHandler", sub {
             print STDERR "$$ Apache::AuthenDBI PerlCleanupHandler \n" if $Apache::AuthenDBI::DEBUG;
-            my ($user, $diff);
-            foreach $user (keys %$Passwd) {
-                $diff = time - $Time->{$user};
+            my ($id, $diff);
+            foreach $id (keys %Passwd) {
+                $diff = time - $Time{$id};
                 if ($diff >= $attr->{cache_time}) {
-                    print STDERR "$$ Apache::AuthenDBI delete $user from cache, last access before $diff seconds \n" if $Apache::AuthenDBI::DEBUG;
-                    delete $Passwd->{$user};
-                    delete $Time->{$user};
+                    print STDERR "$$ Apache::AuthenDBI delete $id from cache, last access $diff seconds before \n" if $Apache::AuthenDBI::DEBUG;
+                    delete $Passwd{$id};
+                    delete $Time{$id};
                 }
             }
+            1;
         });
     }
 
@@ -226,7 +229,7 @@ sub handler {
         }
         my $user_sent_quoted = $dbh->quote($user_sent);
         my $statement = "UPDATE $attr->{pwd_table} SET $attr->{log_field} = $attr->{log_string} WHERE $attr->{uid_field}=$user_sent_quoted";
-        print STDERR "$prefix statement = $statement\n" if $Apache::AuthenDBI::DEBUG;
+        print STDERR "$prefix statement: $statement\n" if $Apache::AuthenDBI::DEBUG;
         unless ($dbh->do($statement)) {
             $r->log_reason("$prefix can not do statement: $DBI::errstr", $r->uri);
             $dbh->disconnect;
@@ -277,8 +280,8 @@ Apache::AuthenDBI - Authentication via Perl's DBI
  require valid-user
 
 The AuthType is limited to Basic. The require directive is limited 
-to 'valid-user'. For 'user user_1 user_2 ...' and for group support 
-see AuthzDBI.pm.
+to 'valid-user' and 'user user_1 user_2 ...'. For group support see 
+AuthzDBI.pm.
 
 
 =head1 DESCRIPTION
@@ -317,7 +320,7 @@ If a pwd_whereclause exists, it is appended to the SQL-select.
 At the end a CleanupHandler is initialized, which skips through the password 
 cache and deletes all outdated entries. This is done after sending the response, 
 hence without slowing down response time to the client. The default cache_time 
-is set to 0, which disables the cache, because any user will be deleted 
+is set to 0, which disables the cache, because any user would be deleted 
 immediately from the cache. 
 
 This module supports in addition a simple kind of logging mechanism. Whenever 
@@ -480,10 +483,10 @@ L<Apache>, L<mod_perl>, L<DBI>
 =head1 AUTHORS
 
 =item *
-mod_perl by Doug MacEachern <dougm@telebusiness.co.nz>
+mod_perl by Doug MacEachern <modperl@apache.org>
 
 =item *
-DBI by Tim Bunce <Tim.Bunce@ig.co.uk>
+DBI by Tim Bunce <dbi-users@isc.org>
 
 =item *
 Apache::AuthenDBI by Edmund Mergl <E.Mergl@bawue.de>

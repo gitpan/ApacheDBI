@@ -1,8 +1,8 @@
 package Apache::DebugDBI;
 
-#$Id: DebugDBI.pm,v 1.10 1999/06/02 20:45:45 mergl Exp $
+#$Id: DebugDBI.pm,v 1.11 1999/08/08 17:33:22 mergl Exp $
 
-$Apache::DebugDBI::VERSION = '0.82';
+$Apache::DebugDBI::VERSION = '0.83';
 
 $Apache::AuthenDBI::DEBUG = 1;
 $Apache::AuthzDBI::DEBUG  = 1;

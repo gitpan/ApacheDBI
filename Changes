@@ -1,5 +1,14 @@
 Revision history for ApacheDBI.
 
+0.83  August 08, 1999
+	- make ping configurable, proposed by 
+	  Gunther Birznieks <gunther@nhgri.nih.gov>
+	- the environment variable REMOTE_GROUPS uses as separator $; 
+	  instead of comma.
+	- change $user_sent_quoted to $user_sent when checking for 
+	  placeholders (Michael Smith <mjs@iii.co.uk>)
+	- bug-fix for encrypted passwords, which have never been taken
+	  from the cache. Spotted by Yves BLUSSEAU <yves.blusseau@sncf.fr>.
 
 0.82  June 03, 1999
 	- bug-fix spotted by "Dale Manemann" <manemann@dubuque.net>:

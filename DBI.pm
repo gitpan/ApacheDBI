@@ -2,37 +2,57 @@ package Apache::DBI;
 
 use Apache ();
 use DBI ();
+
 use strict;
 
-#$Id: DBI.pm,v 1.32 1999/06/03 07:37:36 mergl Exp $
+# $Id: DBI.pm,v 1.35 1999/08/09 21:58:31 mergl Exp $
 
-require_version DBI 0.85;
+require_version DBI 1.00;
 
-$Apache::DBI::VERSION = '0.82';
+$Apache::DBI::VERSION = '0.83';
 
 $Apache::DBI::DEBUG = 0;
+#DBI->trace(2);
 
 
-my %Connected;
-my @ChildConnect;
-my %Rollback;
+my %Connected;    # cache for database handles
+my @ChildConnect; # connections to be established when a new httpd child is created
+my %Rollback;     # keeps track of pushed PerlCleanupHandler which can do a rollback after the request has finished
+my %PingTimeOut;  # stores the timeout values per datasource, a negative value de-activates ping, default = 0
+my %LastPingTime; # keeps track of last ping per datasource
 
 
-# supposed to be called in a startup file
+# supposed to be called in a startup script,
+# stores the connections which are to be initiated upon process startup
 sub connect_on_init { push @ChildConnect, [@_] }
 
 # when forking a new child the handler establishes all configured connections
 if(Apache->can('push_handlers')) {
     Apache->push_handlers(PerlChildInitHandler => sub {
-       print STDERR "$$ Apache::DBI PerlChildInitHandler \n" if $Apache::DBI::DEBUG;
-       if (defined @ChildConnect) {
-           for my $aref (@ChildConnect) {
-              shift @$aref;
-              DBI->connect(@$aref);
-	  }
-       }
-       1;
+        print STDERR "$$ Apache::DBI PerlChildInitHandler \n" if $Apache::DBI::DEBUG;
+        if (defined @ChildConnect) {
+            for my $aref (@ChildConnect) {
+               shift @$aref;
+               DBI->connect(@$aref);
+               @$aref[0] =~ s/.+:.*://;
+               $LastPingTime{@$aref[0]} = time;
+            }
+        }
+        1;
     });
+}
+
+
+# supposed to be called in a startup script
+# stores the timeout per datasource for the ping function.
+sub setPingTimeOut { 
+    my $class   = shift;
+    my $dsn     = shift;
+    my $timeout = shift;
+
+    # tpf: the first part of the datasource including the driver name is stripped off
+    $dsn =~ s/.+:.*://;
+    $PingTimeOut{$dsn} = $timeout;
 }
 
 
@@ -43,11 +63,12 @@ sub connect {
     my $drh  = shift;
     my @args = map { defined $_ ? $_ : "" } @_;
     my $idx  = join $;, $args[0], $args[1], $args[2];
+    my $dsn  = $args[0]; # Hmmm, how do I get the driver name ?
 
     # the hash-reference differs between calls even in the same
     # process, so de-reference the hash-reference 
-    my ($key, $val);
-    if (3 == $#args && ref $args[3] eq "HASH") {
+    if (3 == $#args and ref $args[3] eq "HASH") {
+       my ($key, $val);
        while (($key,$val) = each %{$args[3]}) {
            $idx .= "$;$key=$val";
        }
@@ -67,27 +88,35 @@ sub connect {
     # this PerlCleanupHandler is supposed to initiate a rollback after the script has 
     # finished unless AutoCommit is on.
     # note: the PerlCleanupHandler runs after the response has been sent to the client
-    if(!$Rollback{$idx} && Apache->can('push_handlers')) {
+    if(!$Rollback{$idx} and Apache->can('push_handlers')) {
         print STDERR "$$ Apache::DBI push PerlCleanupHandler \n" if $Apache::DBI::DEBUG;
         Apache->push_handlers("PerlCleanupHandler", sub {
             print STDERR "$$ Apache::DBI PerlCleanupHandler \n" if $Apache::DBI::DEBUG;
             my $dbh = $Connected{$idx};
-            if ($Rollback{$idx} && $dbh && $dbh->{Active} && !$dbh->{AutoCommit} && eval {$dbh->rollback}) {
+            if ($Rollback{$idx} and $dbh and $dbh->{Active} and !$dbh->{AutoCommit} and eval {$dbh->rollback}) {
                 print STDERR "$$ Apache::DBI rollback for $idx \n" if $Apache::DBI::DEBUG;
-                delete $Rollback{$idx};
             }
+            delete $Rollback{$idx};
+            1;
 	});
         # make sure, that the rollback is called only once for every 
         # request, even if the script calls connect more than once
         $Rollback{$idx} = 1;
     }
 
+    # do we need to ping the database ?
+    $PingTimeOut{$dsn} = 0 unless defined($PingTimeOut{$dsn});
+    my $now = time;
+    my $needping = ($PingTimeOut{$dsn} >= 0 and $now - $LastPingTime{$dsn} > $PingTimeOut{$dsn}) ? 1 : 0;
+    print STDERR "$$ Apache::DBI need ping: ", $needping == 1 ? "yes" : "no", "\n" if $Apache::DBI::DEBUG;
+    $LastPingTime{$dsn} = $now;
+
     # check first if there is already a database-handle cached
-    # if this is the case, verify the database-handle using the
-    # ping-method. Use eval for checking the connection handle
-    # in order to avoid problems (dying inside ping) when RaiseError 
-    # being on and the handle is invalid. 
-    if ($Connected{$idx} && eval{$Connected{$idx}->ping}) {
+    # if this is the case, possibly verify the database-handle 
+    # using the ping-method. Use eval for checking the connection 
+    # handle in order to avoid problems (dying inside ping) when 
+    # RaiseError being on and the handle is invalid.
+    if ($Connected{$idx} and (!$needping or eval{$Connected{$idx}->ping})) {
         print STDERR "$$ Apache::DBI already connected to '$idx'\n" if $Apache::DBI::DEBUG;
         return (bless $Connected{$idx}, 'Apache::DBI::db');
     }
@@ -122,7 +151,7 @@ sub all_handlers {
   use strict;
   sub disconnect {
       print STDERR "$$ Apache::DBI disconnect (overloaded) \n" if $Apache::DBI::DEBUG;
-      return 1
+      1;
   };
 }
 
@@ -141,7 +170,7 @@ Apache::Status->menu_item(
         return \@s;
    }
 
-) if ($INC{'Apache.pm'} && Apache->module('Apache::Status'));
+) if ($INC{'Apache.pm'} and Apache->module('Apache::Status'));
 
 
 1;
@@ -204,7 +233,8 @@ using the ping-method of the DBI-module. This method returns true as
 default. If the database handle is not valid and the driver module has no 
 implementation for the ping method, you will get an error when accessing the 
 database. As a work-around you can try to replace the ping method by any 
-database command, which is cheap and safe. 
+database command, which is cheap and safe or you can deactivate the usage 
+of the ping method (see CONFIGURATION below). 
 
 Here is generalized ping method, which can be added to the driver module:
 
@@ -266,6 +296,17 @@ apache_1.3.0 or higher and that mod_perl needs to be configured with
 
   PERL_CHILD_INIT=1 PERL_STACKED_HANDLERS=1
 
+The module provides a method to configure the ping-behavior:
+
+ Apache::DBI->setPingTimeOut($data_source, $timeout)
+
+This call should be in a startup file (PerlModule, <Perl> or PerlRequire). 
+Setting the timeout to 0 will always validate the database connection 
+using the ping method (default). Setting the timeout < 0 will de-activate 
+the validation of the database handle. This can be used for drivers, which 
+do not implement the ping-method. Setting the timeout > 0 will ping the 
+database only if the last access was more than timeout seconds before. 
+
 For the menu item 'DBI connections' you need to call Apache::Status BEFORE 
 Apache::DBI ! For an example of the configuration order see startup.pl. 
 
@@ -286,10 +327,10 @@ L<Apache>, L<mod_perl>, L<DBI>
 =head1 AUTHORS
 
 =item *
-mod_perl by Doug MacEachern <dougm@telebusiness.co.nz>
+mod_perl by Doug MacEachern <modperl@apache.org>
 
 =item *
-DBI by Tim Bunce <Tim.Bunce@ig.co.uk>
+DBI by Tim Bunce <dbi-users@isc.org>
 
 =item *
 Apache::AuthenDBI by Edmund Mergl <E.Mergl@bawue.de>

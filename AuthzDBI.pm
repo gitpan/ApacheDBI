@@ -6,11 +6,11 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthzDBI.pm,v 1.19 1999/06/03 08:54:55 mergl Exp $
+#$Id: AuthzDBI.pm,v 1.21 1999/08/09 21:53:12 mergl Exp $
 
-require_version DBI 0.85;
+require_version DBI 1.00;
 
-$Apache::AuthzDBI::VERSION = '0.82';
+$Apache::AuthzDBI::VERSION = '0.83';
 
 $Apache::AuthzDBI::DEBUG = 0;
 
@@ -47,7 +47,7 @@ sub handler {
         my ($type) = '';
         $type .= 'initial ' if $r->is_initial_req;
         $type .= 'main'     if $r->is_main;
-        print STDERR "\n==========\n$prefix request type = $type\n";
+        print STDERR "==========\n$prefix request type = $type\n";
     }
 
     return OK unless $r->is_initial_req; # only the first internal request
@@ -82,12 +82,8 @@ sub handler {
     # select code to return if authorization is denied:
     my $authz_denied= $attr->{expeditive} eq 'on' ? FORBIDDEN : AUTH_REQUIRED;
 
-    # obtain the cache hashes to use:
-    my $attr_summary= join $;, $attr->{data_source}, $attr->{grp_table} || $attr->{pwd_table}, $attr->{uid_field}, $attr->{grp_field}, $attr->{grp_whereclause};
-    $Groups{$attr_summary} = {} unless defined $Groups{$attr_summary};
-    $Time{$attr_summary}   = {} unless defined $Time{$attr_summary};
-    my $Groups = $Groups{$attr_summary};
-    my $Time   = $Time{$attr_summary};
+    # obtain the id for the cache hashes
+    my $id= join $;, $user_sent, $attr->{data_source}, $attr->{grp_table} || $attr->{pwd_table}, $attr->{uid_field}, $attr->{grp_field};
 
     # check if requirements exists
     my ($ary_ref) = $r->requires;
@@ -102,7 +98,7 @@ sub handler {
     }
 
     # iterate over all requirement directives and store them according to their type (valid-user, user, group)
-    my($hash_ref, $valid_user, $user_requirements, $group_requirements, @require);
+    my($hash_ref, $valid_user, $user_requirements, $group_requirements);
     foreach $hash_ref (@$ary_ref) {
         while (($key,$val) = each %$hash_ref) {
             last if $key eq 'requirement';
@@ -131,10 +127,9 @@ sub handler {
     if ($user_result != OK && $user_requirements) {
         $user_result = AUTH_REQUIRED;
         my $user_required;
-        @require = split /\s+/, $user_requirements;
-        foreach $user_required (@require) {
+        foreach $user_required (split /\s+/, $user_requirements) {
             if ($user_required eq $user_sent) {
-                print STDERR "$prefix user_result = OK: $user_required = $user_sent\n" if $Apache::AuthzDBI::DEBUG;
+                print STDERR "$prefix user_result = OK: $user_required \n" if $Apache::AuthzDBI::DEBUG;
                 $user_result = OK;
                 last;
            }
@@ -144,10 +139,26 @@ sub handler {
     # check for groups
     if ($user_result != OK && $group_requirements) {
         $group_result = AUTH_REQUIRED;
-        # check if the user is cached
-        my ($group, $groups);
+        my ($group, $group_required);
 
-        if (!($groups = $Groups->{$user_sent})) {
+        # check whether the user is cached but consider that the group might have changed
+        my $groups = '';
+        if ($Groups{$id}) {
+            REQUIRE_1: foreach $group_required (split /\s+/, $group_requirements) {
+            foreach $group (split(/$;/, $Groups{$id})) {
+                    if ($group_required eq $group) {
+                        $groups = $Groups{$id};
+                        last REQUIRE_1;
+		    }
+                }
+            }
+        }
+
+        if ($groups) { # found in cache
+            printf STDERR "$prefix groups found in cache \n" if $Apache::AuthzDBI::DEBUG;
+        } else { # groups are not cached or have changed
+
+            # sanity check
             unless ($attr->{data_source}) {
                 $r->log_reason("missing source parameter for database connect", $r->uri);
                 return SERVER_ERROR;
@@ -168,7 +179,7 @@ sub handler {
             my $compare   = ($attr->{placeholder}      eq "on")  ? "?" : "$user_sent_quoted";
             my $statement = "$select $from $where $compare";
             $statement   .= " AND $attr->{grp_whereclause}" if ($attr->{grp_whereclause});
-            print STDERR "$prefix statement = $statement\n" if $Apache::AuthzDBI::DEBUG;
+            print STDERR "$prefix statement: $statement\n" if $Apache::AuthzDBI::DEBUG;
 
             # prepare statement
             my $sth;
@@ -180,43 +191,41 @@ sub handler {
 
             # execute statement
             my $rv;
-            unless ($rv = ($attr->{placeholder} eq "on") ? $sth->execute($user_sent_quoted) : $sth->execute) {
+            unless ($rv = ($attr->{placeholder} eq "on") ? $sth->execute($user_sent) : $sth->execute) {
                 $r->log_reason("can not execute statement: $DBI::errstr", $r->uri);
                 $dbh->disconnect;
                 return SERVER_ERROR;
             }
 
-            # fetch result and build comma separated group-list
+            # fetch result and build a group-list
+            my $group;
             while ( $group = $sth->fetchrow_array ) {
                 # strip trailing blanks for fixed-length data-type
                 $group =~ s/ +$//;
-                $groups .= ",$group";
+                $groups .= "$group$;";
             }
-            $groups =~ s/^,//go;
+            chop $groups if $groups;
 
             $sth->finish;
             $dbh->disconnect;
-
-            # cache userid/groups if cache_time is configured
-            $Groups->{$user_sent} = $groups if $attr->{cache_time} > 0;
         }
         $r->subprocess_env(REMOTE_GROUPS => $groups);
         print STDERR "$prefix groups = >$groups<\n" if $Apache::AuthzDBI::DEBUG;
 
-        # update timestamp if cache_time is configured
-        $Time->{$user_sent} = time if $attr->{cache_time} > 0;
-
         # skip through the required groups until the first matches
-        my $group_required;
-        @require = split /\s+/, $group_requirements;
-        REQUIRE: foreach $group_required (@require) {
-            foreach $group (split ',', $groups) {
+        REQUIRE_2: foreach $group_required (split /\s+/, $group_requirements) {
+            foreach $group (split(/$;/, $groups)) {
                 # check group
                 if ($group_required eq $group) {
                     $group_result = OK;
                     $r->subprocess_env(REMOTE_GROUP => $group);
-                    print STDERR "$prefix group_result = OK: $group_required = $group\n" if $Apache::AuthzDBI::DEBUG;
-                    last REQUIRE;
+                    print STDERR "$prefix group_result = OK: $group_required \n" if $Apache::AuthzDBI::DEBUG;
+                    # update timestamp and cache userid/groups if cache_time is configured
+                    if ($attr->{cache_time} > 0) {
+                        $Time{$id}   = time;
+                        $Groups{$id} = $groups;
+                    }
+                    last REQUIRE_2;
                 }
             }
         }
@@ -238,15 +247,16 @@ sub handler {
         print STDERR "$$ Apache::AuthzDBI push PerlCleanupHandler \n" if $Apache::AuthzDBI::DEBUG;
         Apache->push_handlers("PerlCleanupHandler", sub {
             print STDERR "$$ Apache::AuthzDBI PerlCleanupHandler \n" if $Apache::AuthzDBI::DEBUG;
-            my ($user, $diff);
-            foreach $user (keys %$Groups) {
-                $diff = time - $Time->{$user};
+            my ($id, $diff);
+            foreach $id (keys %Groups) {
+                $diff = time - $Time{$id};
                 if ($diff >= $attr->{cache_time}) {
-                    print STDERR "$$ Apache::AuthzDBI delete $user from cache, last access before $diff seconds \n" if $Apache::AuthzDBI::DEBUG;
-                    delete $Groups->{$user};
-                    delete $Time->{$user};
+                    print STDERR "$$ Apache::AuthzDBI delete $id from cache, last access $diff seconds before \n" if $Apache::AuthzDBI::DEBUG;
+                    delete $Groups{$id};
+                    delete $Time{$id};
                 }
             }
+            1;
         });
     }
 
@@ -325,12 +335,12 @@ until the first match.
 
 In case of one or more group-names, all groups of the given user-name are 
 looked up in the cache. If the user is not found in the cache, the groups are 
-requested from the database. A comma separated list of all these groups is put 
+requested from the database. A $; separated list of all these groups is put 
 into the environment variable REMOTE_GROUPS. Then these groups are compared 
 with the required groups until the first match. 
 
-If there is no match and the authoritative directive 
-is set to 'on' the request is rejected. 
+If there is no match and the authoritative directive is set to 'on' the request 
+is rejected. 
 
 In case the authorization succeeds, the environment variable REMOTE_GROUP is 
 set to the group name, so scripts that are protected by AuthzDBI don't need to 
@@ -469,10 +479,10 @@ L<Apache>, L<mod_perl>, L<DBI>
 =head1 AUTHORS
 
 =item *
-mod_perl by Doug MacEachern <dougm@telebusiness.co.nz>
+mod_perl by Doug MacEachern <modperl@apache.org>
 
 =item *
-DBI by Tim Bunce <Tim.Bunce@ig.co.uk>
+<dbiDBI by Tim Bunce <dbi-users@isc.org>
 
 =item *
 Apache::AuthzDBI by Edmund Mergl <E.Mergl@bawue.de>
