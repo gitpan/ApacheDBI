@@ -3,11 +3,14 @@ package Apache::DBI;
 use DBI ();
 use strict;
 
-#$Id: DBI.pm,v 1.9 1997/06/29 09:41:27 mergl Exp $
+#$Id: DBI.pm,v 1.12 1997/06/30 20:12:22 mergl Exp $
 
 require_version DBI 0.85;
 
-my $VERSION = '0.7';
+$Apache::DBI::VERSION = '0.71';
+
+$Apache::DBI::DEBUG = 0;
+
 
 my %Connected;
 
@@ -19,16 +22,14 @@ sub connect {
     my @args = map { defined $_ ? $_ : "" } @_;
     my $idx  = join (":", (@args));
 
-    my $APACHE_DBI_DEBUG = $ENV{APACHE_DBI_DEBUG} || 0;
-
     if (($Connected{$idx} && $Connected{$idx}->ping)) {
-        print STDERR "Pid = $$, Apache::DBI::connect already connected to '$idx'\n" if $APACHE_DBI_DEBUG;
+        print STDERR "Pid = $$, Apache::DBI::connect already connected to '$idx'\n" if $Apache::DBI::DEBUG;
         return (bless $Connected{$idx}, 'Apache::DBI::db') if ($Connected{$idx} && $Connected{$idx}->ping);
     }
 
     $Connected{$idx} = $drh->connect(@args);
     $Connected{$idx}->{InactiveDestroy} = 1;
-    print STDERR "Pid = $$, Apache::DBI::connect new connect to '$idx'\n" if $APACHE_DBI_DEBUG;
+    print STDERR "Pid = $$, Apache::DBI::connect new connect to '$idx'\n" if $Apache::DBI::DEBUG;
     return (bless $Connected{$idx}, 'Apache::DBI::db');
 }
 
@@ -124,16 +125,6 @@ because of the limitations explained above. It shows the current
 database connections for one specific httpd process, the one which 
 happens to serve the current request. Other httpd children might have 
 other database connections. 
-
-
-=head1 DEBUGGING
-
-To turn on debugging add the following line to httpd.conf: 
-
-  PerlSetEnv APACHE_DBI_DEBUG 1
-
-Watch the output after restarting the httpd as well as the error 
-logfile. 
 
 
 =head1 SEE ALSO

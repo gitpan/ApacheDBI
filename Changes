@@ -1,9 +1,12 @@
 Revision history for ApacheDBI.
 
-0.7 July 01, 1997
+0.71 July 01, 1997
+	- debugging is now controlled by a global variable
+
+0.7  July 01, 1997
 	- changed the way of initiating debug output
 
-0.6 May 20, 1997
+0.6  May 20, 1997
 	- fixed bug which caused a disconnect with some 
           DBD-drivers (Oracle,...)
 

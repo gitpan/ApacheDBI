@@ -6,11 +6,13 @@ use DBI ();
 
 use strict;
 
-#$Id: AuthenDBI.pm,v 1.8 1997/06/29 09:41:27 mergl Exp $
+#$Id: AuthenDBI.pm,v 1.11 1997/06/30 20:12:22 mergl Exp $
 
 require_version DBI 0.85;
 
-my $VERSION = '0.7';
+$Apache::AuthenDBI::VERSION = '0.71';
+
+$Apache::AuthenDBI::DEBUG = 0;
 
 
 my %Config = (
@@ -27,15 +29,13 @@ sub handler {
 
     my($r) = @_;
 
-    my $APACHE_AUTHENDBI_DEBUG = $ENV{APACHE_AUTHENDBI_DEBUG} || 0;
-
-    print STDERR "\nApache::AuthenDBI::handler\n" if $APACHE_AUTHENDBI_DEBUG;
+    print STDERR "\nApache::AuthenDBI::handler\n" if $Apache::AuthenDBI::DEBUG;
 
     return OK unless $r->is_initial_req; #only the first internal request
 
     # here the dialog pops up and asks you for userid and password
     my($res, $passwd_sent) = $r->get_basic_auth_pw;
-    print STDERR "get_basic_auth = $res, password sent = $passwd_sent\n" if $APACHE_AUTHENDBI_DEBUG;
+    print STDERR "get_basic_auth = $res, password sent = $passwd_sent\n" if $Apache::AuthenDBI::DEBUG;
     return $res if $res; # e.g. HTTP_UNAUTHORIZED
 
     my($key, $val);
@@ -44,7 +44,7 @@ sub handler {
 	$val = $r->dir_config($key) || $val;
 	$key =~ s/^AuthDBI//;
 	$attr->{$key} = $val;
-        printf STDERR "Config{ %-15s } = %s\n", $key, $val if $APACHE_AUTHENDBI_DEBUG;
+        printf STDERR "Config{ %-15s } = %s\n", $key, $val if $Apache::AuthenDBI::DEBUG;
     }
 
     my $dbh;
@@ -55,10 +55,10 @@ sub handler {
     }
 
     my $user_sent = $dbh->quote($r->connection->user);
-    print STDERR "user sent = $user_sent, password sent = $passwd_sent \n" if $APACHE_AUTHENDBI_DEBUG;
+    print STDERR "user sent = $user_sent, password sent = $passwd_sent \n" if $Apache::AuthenDBI::DEBUG;
 
     my $statement = "SELECT $attr->{PasswordField} from $attr->{UserTable} WHERE $attr->{NameField}=$user_sent";
-    print STDERR "statement = $statement\n" if $APACHE_AUTHENDBI_DEBUG;
+    print STDERR "statement = $statement\n" if $Apache::AuthenDBI::DEBUG;
 
     my $sth;
     unless ($sth = $dbh->prepare($statement)) {
@@ -75,7 +75,7 @@ sub handler {
     }
 
     my @row = $sth->fetchrow;
-    print STDERR "row = @row \n" if $APACHE_AUTHENDBI_DEBUG;
+    print STDERR "row = @row \n" if $Apache::AuthenDBI::DEBUG;
 
     $sth->finish;
 
@@ -159,16 +159,6 @@ if the appropriate module Apache::DBI is already loaded !
 The database access uses Perl's DBI. For supported DBI drivers see: 
 
  http://www.hermetica.com/technologia/DBI/
-
-
-=head1 DEBUGGING
-
-To turn on debugging add the following line to httpd.conf: 
-
-  PerlSetEnv APACHE_AUTHENDBI_DEBUG 1
-
-Watch the output after restarting the httpd as well as the error 
-logfile. 
 
 
 =head1 SEE ALSO

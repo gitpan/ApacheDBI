@@ -1,6 +1,6 @@
 #-------------------------------------------------------
 #
-# $Id: README,v 1.8 1997/06/29 09:41:27 mergl Exp $
+# $Id: README,v 1.9 1997/06/30 20:12:22 mergl Exp $
 #
 #-------------------------------------------------------
 
@@ -8,7 +8,7 @@
 DESCRIPTION:
 ------------
 
-This is version 0.7 of Apache::AuthenDBI.pm and Apache::DBI.pm.
+This is version 0.71 of Apache::AuthenDBI.pm and Apache::DBI.pm.
 
 These two modules are supposed to be used with the Apache daemon together with an 
 embedded perl interpreter like mod_perl. AuthenDBI.pm provides authentication via 
@@ -49,14 +49,13 @@ IF YOU HAVE PROBLEMS:
 Please send comments and bug-reports to <E.Mergl@bawue.de>
 
 Before sending a bug report it might be useful to look at 
-the debug output. For this add the following lines in your 
-httpd.conf:
+the debug output. For this set the following variables in 
+your script:
 
-  PerlSetEnv APACHE_DBI_DEBUG 1
-  PerlSetEnv APACHE_AUTHENDBI_DEBUG 1
+  $Apache::DBI::DEBUG = 1
+  $Apache::AuthenDBI::DEBUG 1
 
-Restart the httpd and watch the ouput from httpd as well as 
-the error logfile.
+and watch the error logfile.
 
 If this doesn't help, please mail me the debug output and 
 include the output of perl -v,
